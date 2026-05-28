@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="theme-color" content="#0d0d1a"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Probeplaner"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<link rel="manifest" href="manifest.json"/>
+<title>Probeplaner</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0d0d1a;color:#eef0f8;min-height:100vh;}
+button,input,select,textarea{font-family:inherit;}
+:root{--accent:#6c63ff;--orange:#e2844a;--green:#2ed573;--red:#ff4757;--yellow:#ffa502;--purple:#9b59b6;--card:#16162a;--border:#1e1e30;--input-bg:#0d0d1a;--text2:#888;}
+
+/* Layout */
+#app{display:flex;flex-direction:column;height:100vh;max-width:520px;margin:0 auto;}
+header{background:#0d0d1a;padding:14px 18px 0;border-bottom:1px solid var(--border);flex-shrink:0;}
+.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.app-title{font-size:20px;font-weight:800;color:#fff;letter-spacing:-0.5px;}
+.app-title span{color:var(--accent);}
+.header-actions{display:flex;gap:8px;}
+.icon-btn{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:14px;cursor:pointer;color:#aaa;}
+.tabs{display:flex;overflow-x:auto;gap:0;scrollbar-width:none;border-bottom:2px solid var(--border);}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{flex-shrink:0;padding:9px 14px;font-size:11px;font-weight:700;color:#555;background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;letter-spacing:0.3px;}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+main{flex:1;overflow-y:auto;padding:16px;}
+main::-webkit-scrollbar{width:3px;}
+main::-webkit-scrollbar-thumb{background:#2a2a40;border-radius:2px;}
+
+/* Cards */
+.card{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:10px;border:1px solid var(--border);}
+.card-title{font-size:13px;font-weight:700;margin-bottom:10px;color:#eef0f8;}
+.section-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#555;margin-bottom:8px;}
+
+/* Form */
+.field{margin-bottom:12px;}
+.field-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;}
+.inp{width:100%;background:var(--input-bg);border:1px solid #2a2a40;border-radius:8px;padding:10px 12px;font-size:13px;color:#eef0f8;outline:none;}
+.inp:focus{border-color:var(--accent);}
+.inp-sm{padding:7px 10px;font-size:12px;}
+textarea.inp{resize:none;height:64px;}
+select.inp option{background:#16162a;}
+.row{display:flex;gap:8px;align-items:flex-end;}
+.row .field{flex:1;margin-bottom:0;}
+
+/* Buttons */
+.btn{border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-orange{background:var(--orange);color:#fff;}
+.btn-ghost{background:#1e1e30;color:#aaa;}
+.btn-danger{background:#ff475720;color:var(--red);border:1px solid #ff475740;}
+.btn-sm{padding:6px 12px;font-size:12px;border-radius:6px;}
+.btn-full{width:100%;}
+.btn-row{display:flex;gap:8px;margin-top:14px;}
+
+/* Pills / Tags */
+.pill{display:inline-block;padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700;margin:2px;}
+.pill-accent{background:#6c63ff22;color:var(--accent);}
+.pill-orange{background:#e2844a22;color:var(--orange);}
+.pill-green{background:#2ed57322;color:var(--green);}
+.pill-red{background:#ff475722;color:var(--red);}
+.pill-yellow{background:#ffa50222;color:var(--yellow);}
+.pill-purple{background:#9b59b622;color:var(--purple);}
+.pill-gray{background:#88888822;color:#888;}
+
+/* Toggle checkbox */
+.toggle-row{display:flex;align-items:center;gap:10px;padding:8px 0;}
+.toggle-row label{font-size:13px;cursor:pointer;flex:1;}
+.toggle{position:relative;width:38px;height:22px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;position:absolute;}
+.slider{position:absolute;inset:0;background:#2a2a40;border-radius:11px;transition:0.2s;}
+.slider:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#888;border-radius:50%;transition:0.2s;}
+.toggle input:checked+.slider{background:var(--accent);}
+.toggle input:checked+.slider:before{transform:translateX(16px);background:#fff;}
+
+/* Chip select */
+.chip-group{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+.chip{padding:5px 12px;border-radius:16px;font-size:12px;font-weight:700;border:1px solid #2a2a40;background:none;color:#888;cursor:pointer;}
+.chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.chip.active-orange{background:var(--orange);color:#fff;border-color:var(--orange);}
+
+/* PLAN VIEW */
+.plan-day{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px;border:1px solid var(--border);}
+.plan-day-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.plan-day-name{font-size:16px;font-weight:800;}
+.plan-day-meta{font-size:11px;color:var(--text2);}
+.plan-empty{text-align:center;padding:20px;color:#555;font-size:13px;font-style:italic;}
+.block{border-radius:10px;padding:11px 13px;margin-bottom:7px;position:relative;}
+.block-tech{background:#e2844a0f;border-left:3px solid var(--orange);}
+.block-solo{background:#6c63ff0f;border-left:3px solid var(--accent);}
+.block-orch{background:#2ed5730f;border-left:3px solid var(--green);}
+.block-priv{background:#ff6b9d0f;border-left:3px solid #ff6b9d;}
+.block-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.block-type{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;}
+.block-time{font-size:11px;color:var(--text2);}
+.block-item{font-size:12px;color:#ccc;margin-top:3px;padding-left:2px;line-height:1.5;}
+.block-urgent{border:1px solid var(--red)!important;background:#ff47570a!important;}
+.urgent-badge{display:inline-block;background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:8px;margin-left:6px;}
+.alloc-bar{display:flex;align-items:center;gap:6px;margin-top:6px;}
+.alloc-lbl{font-size:10px;color:#666;width:70px;flex-shrink:0;}
+.alloc-track{flex:1;height:4px;background:#1e1e30;border-radius:2px;overflow:hidden;}
+.alloc-fill{height:100%;border-radius:2px;}
+.alloc-pct{font-size:10px;color:#555;width:30px;text-align:right;}
+
+/* Day adjust */
+.day-adjust{display:flex;align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+.day-adjust label{font-size:11px;color:#888;cursor:pointer;display:flex;align-items:center;gap:5px;}
+
+/* Friday heimreise */
+.heimreise-bar{background:#e2844a12;border:1px solid #e2844a30;border-radius:8px;padding:8px 12px;margin-top:8px;display:flex;align-items:center;gap:10px;font-size:12px;}
+
+/* List items */
+.list-item{background:var(--input-bg);border-radius:8px;padding:10px 12px;margin-bottom:7px;border:1px solid #1a1a2e;display:flex;align-items:flex-start;gap:10px;}
+.list-item-body{flex:1;min-width:0;}
+.list-item-title{font-size:13px;font-weight:600;margin-bottom:3px;}
+.list-item-meta{font-size:11px;color:var(--text2);line-height:1.5;}
+.list-item-actions{display:flex;gap:5px;flex-shrink:0;}
+.icon-action{background:none;border:none;cursor:pointer;font-size:15px;padding:3px;color:#555;}
+.icon-action:hover{color:#aaa;}
+
+/* Progress prio bar (Orchester deadline) */
+.deadline-bar{height:4px;border-radius:2px;margin-top:6px;overflow:hidden;background:#1e1e30;}
+.deadline-fill{height:100%;border-radius:2px;transition:width 0.3s;}
+
+/* Overlays */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:300;display:none;align-items:flex-end;justify-content:center;}
+.overlay.open{display:flex;}
+.sheet{background:#16162a;border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:22px 18px 40px;max-height:90vh;overflow-y:auto;}
+.sheet-handle{width:36px;height:4px;background:#333;border-radius:2px;margin:0 auto 18px;}
+.sheet-title{font-size:16px;font-weight:700;margin-bottom:18px;}
+
+/* Settings */
+.settings-section{margin-bottom:20px;}
+.settings-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--orange);margin-bottom:10px;}
+
+/* Notification popup */
+.popup{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#16162a;border:1px solid var(--border);border-radius:12px;padding:12px 18px;font-size:13px;font-weight:600;z-index:500;display:none;max-width:300px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.4);}
+.popup.show{display:block;}
+
+/* Confirm dialog */
+.confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;}
+.confirm-overlay.open{display:flex;}
+.confirm-card{background:#16162a;border-radius:16px;padding:24px 20px;width:100%;max-width:320px;border:1px solid var(--border);}
+.confirm-title{font-size:16px;font-weight:700;margin-bottom:8px;}
+.confirm-text{font-size:13px;color:#aaa;margin-bottom:20px;line-height:1.5;}
+
+/* Empty state */
+.empty-state{text-align:center;padding:40px 20px;color:#555;}
+.empty-icon{font-size:40px;margin-bottom:12px;}
+.empty-title{font-size:15px;font-weight:700;margin-bottom:6px;color:#888;}
+.empty-sub{font-size:12px;line-height:1.6;}
+
+/* Done state */
+.block-done{opacity:0.45;}
+.block-done .block-type::after{content:" ✓";color:var(--green);}
+.check-block{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;border:2px solid #2a2a40;cursor:pointer;flex-shrink:0;font-size:13px;background:none;transition:all 0.15s;}
+.check-block.checked{background:var(--green);border-color:var(--green);color:#fff;}
+.day-done-bar{height:4px;border-radius:2px;background:#1e1e30;margin-top:8px;overflow:hidden;}
+.day-done-fill{height:100%;background:var(--green);border-radius:2px;transition:width 0.3s;}
+
+/* Prio colors */
+.prio-1{color:var(--red);}
+.prio-2{color:var(--yellow);}
+.prio-3{color:var(--accent);}
+.prio-4{color:var(--green);}
+.prio-5{color:#555;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-top">
+      <div class="app-title">Probeplaner<span>.</span></div>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="openHfu()" title="Hauptfachunterricht">🎓</button>
+        <button class="icon-btn" onclick="openSettings()" title="Einstellungen">⚙️</button>
+      </div>
+    </div>
+    <div class="tabs" id="mainTabs">
+      <button class="tab active" data-tab="plan">📋 Plan</button>
+      <button class="tab" data-tab="solo">🎵 Solo</button>
+      <button class="tab" data-tab="technik">⚙️ Technik</button>
+      <button class="tab" data-tab="orch">🎼 Orch/NF</button>
+      <button class="tab" data-tab="termine">📅 Termine</button>
+      <button class="tab" data-tab="privat">🎤 Privat</button>
+      <button class="tab" data-tab="stats">📊 Statistik</button>
+    </div>
+  </header>
+  <main id="mc"></main>
+</div>
+
+<!-- SETTINGS OVERLAY -->
+<div class="overlay" id="settingsOverlay">
+<div class="sheet" style="max-height:95vh;">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">⚙️ Einstellungen</div>
+
+  <div class="settings-section">
+    <div class="settings-title">Zeitplanung</div>
+    <div class="row">
+      <div class="field"><div class="field-label">Block-Länge (Min)</div><input class="inp" id="s_blockMin" type="number" min="15" max="120" step="5"/></div>
+      <div class="field"><div class="field-label">Pause (Min)</div><input class="inp" id="s_pauseMin" type="number" min="5" max="60" step="5"/></div>
+    </div>
+    <div class="row">
+      <div class="field"><div class="field-label">Start (Mo-Fr)</div><input class="inp" id="s_startTime" type="time"/></div>
+      <div class="field"><div class="field-label">Ende (Mo-Fr)</div><input class="inp" id="s_endTime" type="time"/></div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-title">Gewichtung Standard (Solo/Technik %)</div>
+    <div class="row" style="align-items:center;gap:10px">
+      <span style="font-size:12px;color:var(--accent);font-weight:700;width:70px">Solo <span id="s_soloLbl">50</span>%</span>
+      <input type="range" id="s_soloRatio" min="20" max="80" step="5" style="flex:1" oninput="document.getElementById('s_soloLbl').textContent=this.value;document.getElementById('s_techLbl').textContent=100-this.value"/>
+      <span style="font-size:12px;color:var(--orange);font-weight:700;width:70px;text-align:right">Technik <span id="s_techLbl">50</span>%</span>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-title">Instrumente</div>
+    <div class="chip-group" id="s_instruments">
+      <button class="chip active" data-instr="B-Trompete">B-Trompete</button>
+      <button class="chip active" data-instr="C-Trompete">C-Trompete</button>
+      <button class="chip active" data-instr="A-Piccolo">A-Piccolo</button>
+      <button class="chip active" data-instr="Flügelhorn">Flügelhorn</button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-title">Wochen-Etüde</div>
+    <div class="toggle-row">
+      <label for="s_etuedeOn">Wochen-Etüde aktivieren</label>
+      <label class="toggle"><input type="checkbox" id="s_etuedeOn" onchange="toggleSettingsEtuede()"/><span class="slider"></span></label>
+    </div>
+    <div id="s_etuedeFields" style="display:none">
+      <div class="row">
+        <div class="field"><div class="field-label">Mal pro Woche</div>
+          <select class="inp" id="s_etuedeDays">
+            <option value="7">Täglich</option>
+            <option value="5">5x/Woche</option>
+            <option value="3">3x/Woche</option>
+          </select>
+        </div>
+        <div class="field"><div class="field-label">Minuten</div><input class="inp" id="s_etuedeMin" type="number" min="10" max="60" step="5" value="30"/></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-title">Orchester / Nebenfach</div>
+    <div class="toggle-row">
+      <label for="s_orchOn">Orchester/Nebenfach berücksichtigen</label>
+      <label class="toggle"><input type="checkbox" id="s_orchOn"/><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-ghost" onclick="closeSettings()">Abbrechen</button>
+    <button class="btn btn-primary" onclick="saveSettings()">Speichern</button>
+  </div>
+</div>
+</div>
+
+<!-- HFU OVERLAY -->
+<div class="overlay" id="hfuOverlay">
+<div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">🎓 Hauptfachunterricht nächste Woche</div>
+  <div class="field"><div class="field-label">Wochentag</div>
+    <select class="inp" id="hfu_day">
+      <option value="">— Kein HFU diese Woche —</option>
+      <option value="Mo">Montag</option><option value="Di">Dienstag</option>
+      <option value="Mi">Mittwoch</option><option value="Do">Donnerstag</option>
+      <option value="Fr">Freitag</option>
+    </select>
+  </div>
+  <div class="row">
+    <div class="field"><div class="field-label">Von</div><input class="inp" id="hfu_start" type="time" value="10:00"/></div>
+    <div class="field"><div class="field-label">Bis</div><input class="inp" id="hfu_end" type="time" value="12:00"/></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-ghost" onclick="closeHfu()">Abbrechen</button>
+    <button class="btn btn-primary" onclick="saveHfu()">Speichern</button>
+  </div>
+</div>
+</div>
+
+<!-- ADD/EDIT SHEET (generic) -->
+<div class="overlay" id="addOverlay">
+<div class="sheet" id="addSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="addTitle">Hinzufügen</div>
+  <div id="addContent"></div>
+</div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-card">
+    <div class="confirm-title" id="confirmTitle">Bist du sicher?</div>
+    <div class="confirm-text" id="confirmText"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="confirmNo">Nein</button>
+      <button class="btn btn-primary" id="confirmYes">Ja</button>
+    </div>
+  </div>
+</div>
+
+<!-- POPUP -->
+<div class="popup" id="popup"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+var APP = {
+  settings: {
+    blockMin: 45,
+    pauseMin: 15,
+    startTime: "07:30",
+    endTime: "19:00",
+    soloRatio: 50,  // % solo, rest technik
+    instruments: ["B-Trompete","C-Trompete","A-Piccolo","Flügelhorn"],
+    etuedeOn: false,
+    etuedeDays: 5,
+    etuedeMin: 30,
+    orchOn: true,
+    // per-day overrides: { "Mo": {start:"08:00", end:"18:00"} }
+    dayOverrides: {}
+  },
+  solo: [],       // { id, name, composer, instrument, status:"active"|"archive", bereiche:[], weight:1 }
+  technik: [],    // { id, name, book, page, nr, freqPerWeek:7, dauer:10 }
+  orch: [],       // { id, type:"orch"|"nf", name, instrument, from, until, dauer, active }
+  termine: {
+    semester: { start:"", end:"" },
+    stundenplan: [],  // { id, name, weekday, start, end, travelTo, travelBack }
+    other: []         // { id, name, date, start, end, travel }
+  },
+  privat: {
+    auftritte: [],  // { id, name, date, location, needsPractice, practiceWhat, practiceFrom, practiceDailyMin }
+    projekte: []    // { id, name, deadline, needsPractice, practiceWhat, practiceFrom, practiceDailyMin }
+  },
+  hfu: { day:"", start:"10:00", end:"12:00" },
+  // done blocks: { "2024-01-15": { blockIdx: true } }
+  done: {},
+  // generated plan: { "Mo": { blocks:[], adjustStart:null, adjustEnd:null, heimreise:false, heimreiseTime:"" } }
+  plan: {},
+  // per-day overrides set by user on plan view
+  dayAdjust: {}
+};
+
+function loadApp(){
+  try{var s=localStorage.getItem("probeplan_v1");if(s)APP=Object.assign(APP,JSON.parse(s));}catch(e){}
+}
+function saveApp(){try{localStorage.setItem("probeplan_v1",JSON.stringify(APP));}catch(e){}}
+loadApp();
+
+// ══════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════
+var DAYS_DE=["Mo","Di","Mi","Do","Fr","Sa","So"];
+var DAYS_FULL=["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
+var DAYS_JS=[1,2,3,4,5,6,0]; // Mon=1,...,Sun=0
+function pad(n){return String(n).padStart(2,"0");}
+function uid(){return "x"+Date.now()+Math.random().toString(36).slice(2,6);}
+function today(){var d=new Date();return pad(d.getFullYear())+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function todayDayDE(){var d=new Date();return DAYS_DE[d.getDay()===0?6:d.getDay()-1];}
+function ptMin(s){if(!s)return 0;var p=s.split(":");return parseInt(p[0])*60+parseInt(p[1]);}
+function minToTime(m){return pad(Math.floor(m/60))+":"+pad(m%60);}
+function esc(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/(1000*60*60*24));}
+function addDays(dateStr,n){var d=new Date(dateStr+"T12:00:00");d.setDate(d.getDate()+n);return pad(d.getFullYear())+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function getMonday(){var d=new Date();var day=d.getDay();var diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);return pad(d.getFullYear())+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function getWeekDates(){var mon=getMonday();return DAYS_DE.map(function(_,i){return addDays(mon,i);});}
+
+function popup(msg,col){var el=document.getElementById("popup");el.textContent=msg;el.style.borderColor=col||"var(--accent)";el.style.color=col?col:"#eef0f8";el.classList.add("show");setTimeout(function(){el.classList.remove("show");},2200);}
+
+function confirm_(title,text,onYes,yesLabel){
+  document.getElementById("confirmTitle").textContent=title;
+  document.getElementById("confirmText").textContent=text;
+  document.getElementById("confirmYes").textContent=yesLabel||"Ja";
+  document.getElementById("confirmOverlay").classList.add("open");
+  document.getElementById("confirmYes").onclick=function(){document.getElementById("confirmOverlay").classList.remove("open");onYes();};
+  document.getElementById("confirmNo").onclick=function(){document.getElementById("confirmOverlay").classList.remove("open");};
+}
+
+// ══════════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════════
+var curTab="plan";
+document.querySelectorAll(".tab").forEach(function(b){
+  b.onclick=function(){curTab=b.dataset.tab;document.querySelectorAll(".tab").forEach(function(x){x.classList.toggle("active",x.dataset.tab===curTab);});render();};
+});
+function setTab(t){curTab=t;document.querySelectorAll(".tab").forEach(function(x){x.classList.toggle("active",x.dataset.tab===t);});render();}
+
+// ══════════════════════════════════════════════════════
+// PLAN GENERATION ENGINE
+// ══════════════════════════════════════════════════════
+function computeDay(dayDE, dateStr){
+  var S=APP.settings, adj=APP.dayAdjust[dayDE]||{};
+  var isSat=dayDE==="Sa", isSun=dayDE==="So";
+  var override=S.dayOverrides[dayDE]||{};
+
+  var startMin=ptMin(adj.start||override.start||S.startTime);
+  var endMin=ptMin(adj.end||override.end||S.endTime);
+
+  // Friday heimreise
+  if(dayDE==="Fr" && adj.heimreise && adj.heimreiseTime){
+    endMin=Math.min(endMin,ptMin(adj.heimreiseTime));
+  }
+  // Sa/So only if time entered
+  if((isSat||isSun)&&(!adj.start||!adj.end)) return null;
+
+  // Collect fixed events (termine) for this day
+  var blocked=[];
+  // Stundenplan (recurring weekday)
+  var now=new Date();
+  APP.termine.stundenplan.forEach(function(sp){
+    if(sp.weekday===dayDE){
+      // Check semester validity
+      var semStart=APP.termine.semester.start,semEnd=APP.termine.semester.end;
+      if(semStart&&semEnd&&(dateStr<semStart||dateStr>semEnd))return;
+      var travelTo=sp.travelTo?parseInt(sp.travelTo):0;
+      var travelBack=sp.travelBack?parseInt(sp.travelBack):0;
+      var arrivalBuffer=travelTo>0?10:0; // 10min buffer after arriving
+      var s=ptMin(sp.start)-travelTo-arrivalBuffer;
+      var e=ptMin(sp.end)+travelBack;
+      blocked.push({s:Math.max(s,0),e:e,label:esc(sp.name)});
+    }
+  });
+  // Other termine
+  APP.termine.other.forEach(function(t){
+    if(t.date===dateStr){
+      var trav=t.travel?parseInt(t.travel):0;
+      var arrBuf=trav>0?10:0;
+      var s=ptMin(t.start)-trav-arrBuf;
+      var e=ptMin(t.end)+trav;
+      blocked.push({s:Math.max(s,0),e:e,label:esc(t.name)});
+    }
+  });
+  // HFU
+  if(APP.hfu.day===dayDE&&APP.hfu.start){
+    blocked.push({s:ptMin(APP.hfu.start),e:ptMin(APP.hfu.end),label:"HFU"});
+  }
+  blocked.sort(function(a,b){return a.s-b.s;});
+
+  // Free slots
+  var free=[],cur=startMin;
+  blocked.forEach(function(b){if(cur<b.s)free.push({s:cur,e:Math.min(b.s,endMin)});cur=Math.max(cur,b.e);});
+  if(cur<endMin)free.push({s:cur,e:endMin});
+
+  // Fit blocks
+  var blocks=[],count=0,MAX=Math.floor((endMin-startMin)/(S.blockMin+S.pauseMin))+1;
+  for(var fi=0;fi<free.length;fi++){
+    var slot=free[fi],pos=slot.s,first=true;
+    while(count<MAX){
+      if(!first)pos+=S.pauseMin;
+      if(pos+S.blockMin>slot.e)break;
+      blocks.push({start:pos,end:pos+S.blockMin,idx:count});
+      pos+=S.blockMin;count++;first=false;
+    }
+  }
+  if(!blocks.length)return{blocks:[],blocked:blocked,note:"keine_zeit"};
+
+  // Total available minutes
+  var totalMin=blocks.length*S.blockMin;
+  var soloRatio=S.soloRatio/100;
+
+  // Determine which content types to include
+  // Sat/Sun: only solo + technik (unless Mon has unlearned orch)
+  var includeSolo=true, includeTechnik=true, includeOrch=false, includePriv=false;
+  if(!isSat&&!isSun){
+    includeOrch=S.orchOn;
+    includePriv=true;
+  } else {
+    // Check if Monday has orch that hasn't been practiced at all this week
+    var monDate=getWeekDates()[0];
+    var monDateObj=new Date(monDate+"T12:00:00");
+    var todayDate=new Date(dateStr+"T12:00:00");
+    if(monDateObj>todayDate){
+      // Monday is after this day (shouldn't happen) — skip
+    } else {
+      var orchUrgent=APP.orch.filter(function(o){return o.active&&o.until&&o.until===addDays(dateStr,dayDE==="Sa"?1:0);});
+      if(orchUrgent.length)includeOrch=true;
+    }
+  }
+
+  // Build content slots
+  var soloItems=APP.solo.filter(function(s){return s.status==="active";});
+  var techItems=APP.technik.slice();
+  var orchItems=S.orchOn?APP.orch.filter(function(o){
+    return o.active&&o.from&&o.from<=dateStr&&(!o.until||o.until>=dateStr);
+  }):[];
+
+  // Private practice needs
+  var privItems=[];
+  if(includePriv){
+    APP.privat.auftritte.forEach(function(a){if(a.needsPractice&&a.practiceFrom&&a.practiceFrom<=dateStr&&a.date>=dateStr)privItems.push({name:a.practiceWhat||a.name,dauer:a.practiceDailyMin||20,urgent:daysBetween(dateStr,a.date)<=1});});
+    APP.privat.projekte.forEach(function(p){if(p.needsPractice&&p.practiceFrom&&p.practiceFrom<=dateStr&&p.deadline>=dateStr)privItems.push({name:p.practiceWhat||p.name,dauer:p.practiceDailyMin||20,urgent:daysBetween(dateStr,p.deadline)<=1});});
+  }
+
+  // Deadline urgency for orch
+  orchItems.forEach(function(o){o._daysLeft=o.until?daysBetween(dateStr,o.until):999;o._urgent=o._daysLeft<=1;});
+  // Sort orch by urgency
+  orchItems.sort(function(a,b){return a._daysLeft-b._daysLeft;});
+
+  // Filter technik by frequency
+  var weekDayIdx=DAYS_DE.indexOf(dayDE);
+  techItems=techItems.filter(function(t){
+    var freq=t.freqPerWeek||7;
+    if(freq>=7)return true;
+    // simple distribution: spread evenly across week
+    return weekDayIdx%(Math.round(7/freq))===0;
+  });
+  // Sort technik by prio
+  techItems.sort(function(a,b){return(a.prio||3)-(b.prio||3);});
+
+  // Assign blocks to types
+  var assignedBlocks=[];
+  var bIdx=0;
+
+  // 1. Urgent private/orch first
+  var urgentPriv=privItems.filter(function(p){return p.urgent;});
+  var urgentOrch=orchItems.filter(function(o){return o._urgent;});
+  var urgentItems=urgentOrch.concat(urgentPriv);
+
+  urgentItems.forEach(function(item){
+    if(bIdx>=blocks.length)return;
+    var b=blocks[bIdx++];
+    assignedBlocks.push({start:b.start,end:b.end,type:"orch",urgent:true,items:[{name:item.name||(item._urgent?"":""),dauer:item.dauer||S.blockMin}]});
+  });
+
+  // 2. Distribute remaining blocks: soloRatio solo, rest technik
+  var remaining=blocks.slice(bIdx);
+  if(!remaining.length){return{blocks:assignedBlocks,blocked:blocked};}
+
+  var soloCount=Math.round(remaining.length*soloRatio);
+  var techCount=remaining.length-soloCount;
+
+  // Etüde: subtract from solo time if applicable
+  var etuedeActive=S.etuedeOn&&soloItems.length>0;
+
+  // Solo blocks
+  for(var si=0;si<soloCount&&bIdx<blocks.length;si++,bIdx++){
+    var b=blocks[bIdx];
+    var items2=[];
+    if(etuedeActive&&si===0){items2.push({name:"Wochen-Etüde",dauer:S.etuedeMin,type:"etuede"});}
+    if(soloItems.length){
+      // Weight-distribute solo items
+      var totalWeight=soloItems.reduce(function(s,x){return s+(x.weight||1);},0);
+      soloItems.forEach(function(s){
+        var mins=Math.round(((s.weight||1)/totalWeight)*(S.blockMin-(etuedeActive&&si===0?S.etuedeMin:0)));
+        if(mins>0)items2.push({name:s.name+(s.composer?" ("+s.composer+")":""),dauer:mins,instr:s.instrument,bereiche:s.bereiche||[]});
+      });
+    }
+    assignedBlocks.push({start:b.start,end:b.end,type:"solo",items:items2});
+  }
+
+  // Technik blocks
+  var techMins=techCount*S.blockMin;
+  var techForDay=techItems.slice();
+  // Drop low prio items if not enough time
+  var totalTechMin=techForDay.reduce(function(s,t){return s+(t.dauer||10);},0);
+  while(totalTechMin>techMins&&techForDay.length>0){
+    // remove lowest prio (highest number)
+    var maxPrio=Math.max.apply(null,techForDay.map(function(t){return t.prio||3;}));
+    var idx2=techForDay.map(function(t){return t.prio||3;}).lastIndexOf(maxPrio);
+    if(idx2>=0){totalTechMin-=techForDay[idx2].dauer||10;techForDay.splice(idx2,1);}
+    else break;
+  }
+
+  for(var ti=0;ti<techCount&&bIdx<blocks.length;ti++,bIdx++){
+    var b=blocks[bIdx];
+    assignedBlocks.push({start:b.start,end:b.end,type:"technik",items:techForDay.map(function(t){return{name:t.name,dauer:t.dauer||10,prio:t.prio||3};})});
+  }
+
+  // Regular orch/priv (non-urgent) — append to end if blocks remain
+  var nonUrgentOrch=includeOrch?orchItems.filter(function(o){return!o._urgent;}):[];
+  var nonUrgentPriv=includePriv?privItems.filter(function(p){return!p.urgent;}):[];
+  nonUrgentOrch.concat(nonUrgentPriv).forEach(function(item){
+    if(bIdx>=blocks.length)return;
+    var b=blocks[bIdx++];
+    assignedBlocks.push({start:b.start,end:b.end,type:item.type||"orch",items:[{name:item.name||(item.name||""),dauer:item.dauer||S.blockMin}]});
+  });
+
+  return{blocks:assignedBlocks,blocked:blocked};
+}
+
+function generatePlan(fromDayDE){
+  var weekDates=getWeekDates();
+  var fromIdx=fromDayDE?DAYS_DE.indexOf(fromDayDE):0;
+  var todayStr=today(),todayDE=todayDayDE();
+  var todayIdx=DAYS_DE.indexOf(todayDE);
+  // Only regenerate from today or requested day, whichever is later
+  var startIdx=Math.max(fromIdx,todayIdx);
+
+  DAYS_DE.forEach(function(day,i){
+    if(i<startIdx){return;} // keep past days
+    var dateStr=weekDates[i];
+    var result=computeDay(day,dateStr);
+    if(!APP.plan[day]){APP.plan[day]={};}
+    APP.plan[day].blocks=result?result.blocks:[];
+    APP.plan[day].blocked=result?result.blocked:[];
+    APP.plan[day].note=result?result.note:"";
+    APP.plan[day].date=dateStr;
+  });
+  saveApp();
+}
+
+// Toggle a block done/undone
+function toggleBlockDone(dateStr, blockIdx){
+  if(!APP.done[dateStr])APP.done[dateStr]={};
+  APP.done[dateStr][blockIdx]=!APP.done[dateStr][blockIdx];
+  saveApp();
+  renderPlan();
+}
+function isBlockDone(dateStr, blockIdx){
+  return !!(APP.done[dateStr]&&APP.done[dateStr][blockIdx]);
+}
+function dayDoneCount(dateStr, totalBlocks){
+  if(!APP.done[dateStr])return 0;
+  return Object.values(APP.done[dateStr]).filter(Boolean).length;
+}
+
+// Auto-generate on load / after changes
+function autoGenerate(fromDay){
+  generatePlan(fromDay);
+  if(curTab==="plan")render();
+}
+
+// ══════════════════════════════════════════════════════
+// RENDER ROUTER
+// ══════════════════════════════════════════════════════
+function render(){
+  if(curTab==="plan")renderPlan();
+  else if(curTab==="solo")renderSolo();
+  else if(curTab==="technik")renderTechnik();
+  else if(curTab==="orch")renderOrch();
+  else if(curTab==="termine")renderTermine();
+  else if(curTab==="privat")renderPrivat();
+  else if(curTab==="stats")renderStats();
+}
+
+// ══════════════════════════════════════════════════════
+// PLAN VIEW
+// ══════════════════════════════════════════════════════
+function renderPlan(){
+  var weekDates=getWeekDates(),todayStr=today();
+  var hasSolo=APP.solo.some(function(s){return s.status==="active";});
+  var hasTech=APP.technik.length>0;
+
+  if(!hasSolo&&!hasTech){
+    document.getElementById("mc").innerHTML='<div class="empty-state"><div class="empty-icon">🎺</div><div class="empty-title">Noch kein Inhalt</div><div class="empty-sub">Füge Literatur im Solo-Tab oder Übungen im Technik-Tab hinzu um den Plan zu generieren.</div></div>';
+    return;
+  }
+
+  // Auto-generate if plan is empty or outdated
+  if(!APP.plan["Mo"]||!APP.plan["Mo"].date||(APP.plan["Mo"].date!==weekDates[0])){
+    generatePlan();
+  }
+
+  var h="";
+  DAYS_DE.forEach(function(day,di){
+    var dateStr=weekDates[di];
+    var isPast=dateStr<todayStr;
+    var isToday=dateStr===todayStr;
+    var adj=APP.dayAdjust[day]||{};
+    var planDay=APP.plan[day]||{};
+    var isSat=day==="Sa",isSun=day==="So";
+
+    // Sa/So only show if time set
+    if((isSat||isSun)&&(!adj.start||!adj.end)) return;
+
+    h+='<div class="plan-day" style="'+(isPast?"opacity:0.45;":"")+(isToday?"border-color:var(--accent)30;":"")+'">';
+    h+='<div class="plan-day-head">'
+      +'<div><div class="plan-day-name">'+DAYS_FULL[di]+(isToday?'<span style="font-size:11px;color:var(--accent);margin-left:6px">Heute</span>':"")+' </div>'
+      +'<div class="plan-day-meta">'+dateStr.slice(5).replace("-",".")+(planDay.blocks&&planDay.blocks.length?' · '+planDay.blocks.length+' Blöcke':'')+'</div></div>'
+      +'<button onclick="openDayAdjust(\''+day+'\')" class="icon-btn" style="font-size:11px;padding:5px 8px">✏️</button></div>';
+
+    // Heimreise bar (Friday)
+    if(day==="Fr"){
+      h+='<div class="heimreise-bar">'
+        +'<label style="display:flex;align-items:center;gap:7px;cursor:pointer;flex:1">'
+        +'<input type="checkbox"'+(adj.heimreise?" checked":"")+ ' onchange="toggleHeimreise(\''+day+'\',this.checked)"> Heimreise</label>'
+        +(adj.heimreise?'<input type="time" value="'+(adj.heimreiseTime||"14:00")+'" onchange="setHeimreiseTime(\''+day+'\',this.value)" style="background:#0d0d1a;border:1px solid #e2844a40;border-radius:6px;padding:4px 8px;font-size:12px;color:#eef0f8;outline:none;width:90px"/>':'')
+        +'</div>';
+    }
+
+    // Blocks
+    if(!planDay.blocks||!planDay.blocks.length){
+      if(planDay.note==="keine_zeit")h+='<div class="plan-empty">Keine freie Übezeit</div>';
+      else h+='<div class="plan-empty">Kein Plan generiert</div>';
+    } else {
+      var doneCount=dayDoneCount(planDay.date||dateStr, planDay.blocks.length);
+      var donePct=planDay.blocks.length>0?Math.round(doneCount/planDay.blocks.length*100):0;
+      if(planDay.blocks.length>0){
+        h+='<div class="day-done-bar"><div class="day-done-fill" style="width:'+donePct+'%"></div></div>';
+        h+='<div style="font-size:10px;color:'+(donePct===100?"var(--green)":"#555")+';text-align:right;margin-top:3px;margin-bottom:8px">'+(donePct===100?"✓ Alles erledigt":doneCount+"/"+planDay.blocks.length+" abgehakt")+'</div>';
+      }
+      planDay.blocks.forEach(function(block,bi){
+        var bDateStr=planDay.date||dateStr;
+        var done=isBlockDone(bDateStr,bi);
+        var cls="block block-"+block.type+(block.urgent?" block-urgent":"")+(done?" block-done":"");
+        var typeLabel=block.type==="technik"?"⚙️ Technik":block.type==="solo"?"🎵 Solo":block.type==="orch"?"🎼 Orch/NF":"🎤 Privat";
+        var typeCol=block.type==="technik"?"var(--orange)":block.type==="solo"?"var(--accent)":block.type==="orch"?"var(--green)":"#ff6b9d";
+        h+='<div class="'+cls+'">';
+        h+='<div class="block-head">';
+        h+='<span class="block-type" style="color:'+typeCol+'">'+typeLabel+(block.urgent?'<span class="urgent-badge">DRINGEND</span>':"")+'</span>';
+        h+='<div style="display:flex;align-items:center;gap:8px">';
+        h+='<span class="block-time">'+minToTime(block.start)+'–'+minToTime(block.end)+'</span>';
+        h+='<button class="check-block'+(done?' checked':'')+'" onclick="toggleBlockDone(\''+bDateStr+'\','+bi+')" title="Abgehakt">'+(done?'✓':'')+'</button>';
+        h+='</div></div>';
+        if(block.items&&block.items.length){
+          block.items.forEach(function(item){
+            h+='<div class="block-item">'+esc(item.name)+(item.dauer?' <span style="color:#555;font-size:10px">'+item.dauer+"'</span>":"")+'</div>';
+            if(item.bereiche&&item.bereiche.length){item.bereiche.slice(0,2).forEach(function(b){h+='<div class="block-item" style="padding-left:12px;color:#666;font-size:11px">▸ '+esc(b)+'</div>';});}
+          });
+        }
+        h+='</div>';
+      });
+    }
+
+    // Sa/So time settings
+    if(isSat||isSun){
+      h+='<div style="display:flex;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">'
+        +'<div style="flex:1"><div class="field-label">Von</div><input type="time" value="'+(adj.start||"")+'" onchange="setDayTime(\''+day+'\',\'start\',this.value)" class="inp inp-sm"/></div>'
+        +'<div style="flex:1"><div class="field-label">Bis</div><input type="time" value="'+(adj.end||"")+'" onchange="setDayTime(\''+day+'\',\'end\',this.value)" class="inp inp-sm"/></div>'
+        +'</div>';
+    }
+
+    h+='</div>';
+  });
+
+  if(!h)h='<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">Kein Plan für diese Woche</div><div class="empty-sub">Füge Termine im Termine-Tab hinzu oder passe die Einstellungen an.</div></div>';
+  document.getElementById("mc").innerHTML=h;
+}
+
+function toggleHeimreise(day,val){
+  if(!APP.dayAdjust[day])APP.dayAdjust[day]={};
+  APP.dayAdjust[day].heimreise=val;
+  saveApp();autoGenerate(day);
+}
+function setHeimreiseTime(day,val){
+  if(!APP.dayAdjust[day])APP.dayAdjust[day]={};
+  APP.dayAdjust[day].heimreiseTime=val;
+  saveApp();autoGenerate(day);
+}
+function setDayTime(day,field,val){
+  if(!APP.dayAdjust[day])APP.dayAdjust[day]={};
+  APP.dayAdjust[day][field]=val;
+  saveApp();autoGenerate(day);
+}
+
+function openDayAdjust(day){
+  var adj=APP.dayAdjust[day]||{};
+  var h='<div class="field"><div class="field-label">Später anfangen (nur heute)</div><input type="time" class="inp" id="da_start" value="'+(adj.start||APP.settings.startTime)+'"/></div>'
+    +'<div class="field"><div class="field-label">Früher aufhören (nur heute)</div><input type="time" class="inp" id="da_end" value="'+(adj.end||APP.settings.endTime)+'"/></div>'
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button><button class="btn btn-primary" onclick="saveDayAdjust(\''+day+'\')">Übernehmen</button></div>';
+  openAddSheet(DAYS_FULL[DAYS_DE.indexOf(day)]+" anpassen",h);
+}
+
+function saveDayAdjust(day){
+  var start=document.getElementById("da_start").value;
+  var end=document.getElementById("da_end").value;
+  // Confirm if later start
+  var defaultStart=APP.settings.dayOverrides[day]&&APP.settings.dayOverrides[day].start||APP.settings.startTime;
+  if(start>defaultStart){
+    closeAdd();
+    confirm_("Sicher?","Du startest später als geplant ("+start+" statt "+defaultStart+"). Bist du sicher dass du dir die Zeit nehmen kannst?",function(){
+      if(!APP.dayAdjust[day])APP.dayAdjust[day]={};
+      APP.dayAdjust[day].start=start;APP.dayAdjust[day].end=end;
+      saveApp();autoGenerate(day);
+      popup("Tag angepasst ✓");
+    },"Ja, sicher");
+    return;
+  }
+  if(!APP.dayAdjust[day])APP.dayAdjust[day]={};
+  APP.dayAdjust[day].start=start;APP.dayAdjust[day].end=end;
+  saveApp();closeAdd();autoGenerate(day);popup("Tag angepasst ✓");
+}
+
+// ══════════════════════════════════════════════════════
+// SOLO TAB
+// ══════════════════════════════════════════════════════
+function renderSolo(){
+  var active=APP.solo.filter(function(s){return s.status==="active";});
+  var archive=APP.solo.filter(function(s){return s.status==="archive";});
+  var h='<button class="btn btn-primary btn-full" onclick="openAddSolo()">+ Literatur hinzufügen</button>';
+
+  // Weight warning
+  if(active.length>1){
+    var total=active.reduce(function(s,x){return s+(x.weight||1);},0);
+    h+='<div style="background:#6c63ff12;border:1px solid #6c63ff30;border-radius:8px;padding:10px 13px;margin-top:10px;font-size:12px;color:#aaa">'
+      +'Mehrere Werke aktiv. ';
+    active.forEach(function(s,i){h+='<b>'+esc(s.name)+'</b>: '+Math.round(((s.weight||1)/total)*100)+'%'+(i<active.length-1?' · ':'');});
+    h+=' <button onclick="openWeightEditor()" style="margin-left:6px;background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">Gewichtung ändern</button></div>';
+  }
+
+  if(active.length){
+    h+='<div style="margin-top:14px"><div class="section-label">Am Üben</div>';
+    active.forEach(function(s){h+=soloCard(s);});
+    h+='</div>';
+  }
+  if(archive.length){
+    h+='<div style="margin-top:14px"><div class="section-label">Archiv</div>';
+    archive.forEach(function(s){h+=soloCard(s);});
+    h+='</div>';
+  }
+  if(!APP.solo.length)h+='<div class="empty-state" style="margin-top:20px"><div class="empty-icon">🎵</div><div class="empty-title">Noch keine Literatur</div></div>';
+  document.getElementById("mc").innerHTML=h;
+}
+
+function soloCard(s){
+  var isActive=s.status==="active";
+  var h='<div class="list-item">'
+    +'<div class="list-item-body">'
+    +'<div class="list-item-title">'+esc(s.name)+(s.composer?' <span style="font-size:11px;color:#888">– '+esc(s.composer)+'</span>':"")+' </div>'
+    +'<div class="list-item-meta"><span class="pill '+(isActive?"pill-accent":"pill-gray")+'">'+( isActive?"Am Üben":"Archiv")+'</span> <span class="pill pill-purple">'+esc(s.instrument)+'</span></div>';
+  if(isActive&&s.bereiche&&s.bereiche.length){
+    h+='<div style="margin-top:5px">';
+    s.bereiche.forEach(function(b){h+='<div style="font-size:11px;color:#888;padding:1px 0">▸ '+esc(b)+'</div>';});
+    h+='</div>';
+  }
+  h+='</div>'
+    +'<div class="list-item-actions">'
+    +'<button class="icon-action" onclick="editSolo(\''+s.id+'\')">✏️</button>'
+    +'<button class="icon-action" onclick="deleteSolo(\''+s.id+'\')">🗑</button>'
+    +'</div></div>';
+  return h;
+}
+
+function openAddSolo(id){
+  var ex=id?APP.solo.find(function(s){return s.id===id;}):null;
+  var instrs=APP.settings.instruments;
+  var h='<div class="field"><div class="field-label">Name / Werk *</div><input class="inp" id="sl_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Haydn Konzert"/></div>'
+    +'<div class="field"><div class="field-label">Komponist</div><input class="inp" id="sl_composer" value="'+(ex?esc(ex.composer||""):"")+'" placeholder="z.B. Joseph Haydn"/></div>'
+    +'<div class="field"><div class="field-label">Instrument</div><select class="inp" id="sl_instr">';
+  instrs.forEach(function(i){h+='<option value="'+i+'"'+(ex&&ex.instrument===i?" selected":"")+'>'+i+'</option>';});
+  h+='</select></div>';
+  h+='<div class="field"><div class="field-label">Status</div><div class="chip-group">'
+    +'<button class="chip '+((!ex||ex.status==="active")?"active":"")+'" onclick="selectChip(this,\'sl_status\',\'active\')" data-val="active">Am Üben</button>'
+    +'<button class="chip '+(ex&&ex.status==="archive"?"active":"")+'" onclick="selectChip(this,\'sl_status\',\'archive\')" data-val="archive">Archiv</button>'
+    +'</div><input type="hidden" id="sl_status" value="'+(ex?ex.status:"active")+'"/></div>';
+  // Übestellen
+  var bereiche=ex?ex.bereiche||[]:[];
+  h+='<div id="sl_bereiche_section" style="'+((!ex||ex.status==="active")?"":"display:none")+'">';
+  h+='<div class="field-label" style="margin-bottom:6px">Übestellen</div>';
+  bereiche.forEach(function(b,i){h+='<div style="display:flex;gap:6px;margin-bottom:6px"><input class="inp sl-bereich" value="'+esc(b)+'" placeholder="z.B. Takt 12–30..."/><button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">×</button></div>';});
+  h+='<button onclick="addBerreichField()" class="btn btn-ghost btn-sm">+ Übestelle hinzufügen</button></div>';
+  h+='<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>';
+  if(ex)h+='<button class="btn btn-danger btn-sm" onclick="deleteSolo(\''+ex.id+'\')">Löschen</button>';
+  h+='<button class="btn btn-primary" onclick="saveSolo('+(ex?'\''+ex.id+'\'':'null')+')">Speichern</button></div>';
+  openAddSheet(ex?"Literatur bearbeiten":"Literatur hinzufügen",h);
+  // Show/hide Übestellen based on status
+  document.getElementById("sl_status").onchange=function(){document.getElementById("sl_bereiche_section").style.display=this.value==="active"?"":"none";};
+}
+function editSolo(id){openAddSolo(id);}
+function addBerreichField(){var d=document.createElement("div");d.style.cssText="display:flex;gap:6px;margin-bottom:6px";d.innerHTML='<input class="inp sl-bereich" placeholder="z.B. Takt 12–30..."/><button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">×</button>';var sec=document.getElementById("sl_bereiche_section");sec.insertBefore(d,sec.lastElementChild);}
+function saveSolo(id){
+  var name=document.getElementById("sl_name").value.trim();
+  if(!name){popup("Name fehlt","var(--red)");return;}
+  var bereiche=Array.from(document.querySelectorAll(".sl-bereich")).map(function(i){return i.value.trim();}).filter(Boolean);
+  var item={id:id||uid(),name:name,composer:document.getElementById("sl_composer").value.trim(),instrument:document.getElementById("sl_instr").value,status:document.getElementById("sl_status").value,bereiche:bereiche,weight:1};
+  if(id){APP.solo=APP.solo.map(function(s){return s.id===id?item:s;});}else APP.solo.push(item);
+  saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gespeichert ✓");renderSolo();
+}
+function deleteSolo(id){confirm_("Löschen?","Dieses Stück wirklich entfernen?",function(){APP.solo=APP.solo.filter(function(s){return s.id!==id;});saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gelöscht");renderSolo();});}
+
+function openWeightEditor(){
+  var active=APP.solo.filter(function(s){return s.status==="active";});
+  var h='<div style="font-size:13px;color:#aaa;margin-bottom:14px">Passe die Gewichtung der parallelen Werke an:</div>';
+  active.forEach(function(s){
+    h+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;margin-bottom:5px">'+esc(s.name)+'</div>'
+      +'<div style="display:flex;align-items:center;gap:10px">'
+      +'<input type="range" min="1" max="5" step="1" value="'+(s.weight||1)+'" id="wt_'+s.id+'" style="flex:1" oninput="document.getElementById(\'wl_'+s.id+'\').textContent=this.value"/>'
+      +'<span id="wl_'+s.id+'" style="font-size:13px;font-weight:700;width:20px">'+(s.weight||1)+'</span></div></div>';
+  });
+  h+='<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button><button class="btn btn-primary" onclick="saveWeights()">Speichern</button></div>';
+  openAddSheet("Gewichtung",h);
+}
+function saveWeights(){
+  APP.solo.forEach(function(s){var el=document.getElementById("wt_"+s.id);if(el)s.weight=parseInt(el.value)||1;});
+  saveApp();closeAdd();popup("Gewichtung gespeichert ✓");renderSolo();
+}
+
+// ══════════════════════════════════════════════════════
+// TECHNIK TAB
+// ══════════════════════════════════════════════════════
+var PRIO_LABELS=["","Täglich","4-5×/Woche","2-3×/Woche","1×/Woche","Bei Zeit"];
+var PRIO_COLS=["","var(--red)","var(--yellow)","var(--accent)","var(--green)","#555"];
+
+function renderTechnik(){
+  var h='<button class="btn btn-primary btn-full" onclick="openAddTechnik()">+ Übung hinzufügen</button>';
+  if(!APP.technik.length){h+='<div class="empty-state" style="margin-top:20px"><div class="empty-icon">⚙️</div><div class="empty-title">Noch keine Übungen</div></div>';document.getElementById("mc").innerHTML=h;return;}
+  // Group by prio
+  for(var p=1;p<=5;p++){
+    var items=APP.technik.filter(function(t){return(t.prio||3)===p;});
+    if(!items.length)continue;
+    h+='<div style="margin-top:14px"><div class="section-label" style="color:'+PRIO_COLS[p]+'">'+PRIO_LABELS[p]+'</div>';
+    items.forEach(function(t){h+=technikCard(t);});
+    h+='</div>';
+  }
+  document.getElementById("mc").innerHTML=h;
+}
+
+function technikCard(t){
+  return'<div class="list-item">'
+    +'<div style="width:4px;border-radius:2px;background:'+PRIO_COLS[t.prio||3]+';align-self:stretch;flex-shrink:0;"></div>'
+    +'<div class="list-item-body">'
+    +'<div class="list-item-title">'+esc(t.name)+'</div>'
+    +'<div class="list-item-meta">'
+    +(t.book?'<span class="pill pill-gray">'+esc(t.book)+(t.page?" S."+t.page:"")+(t.nr?" Nr."+t.nr:"")+'</span> ':""  )
+    +'<span class="pill" style="background:'+PRIO_COLS[t.prio||3]+'22;color:'+PRIO_COLS[t.prio||3]+'">'+PRIO_LABELS[t.prio||3]+'</span> '
+    +'<span class="pill pill-gray">'+( t.dauer||10)+"'</span>"
+    +'</div></div>'
+    +'<div class="list-item-actions"><button class="icon-action" onclick="editTechnik(\''+t.id+'\')">✏️</button><button class="icon-action" onclick="deleteTechnik(\''+t.id+'\')">🗑</button></div>'
+    +'</div>';
+}
+
+function openAddTechnik(id){
+  var ex=id?APP.technik.find(function(t){return t.id===id;}):null;
+  var h='<div class="field"><div class="field-label">Name der Übung *</div><input class="inp" id="tk_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Lippenvibration, Tonleitern..."/></div>'
+    +'<div class="row"><div class="field"><div class="field-label">Buch (optional)</div><input class="inp" id="tk_book" value="'+(ex?esc(ex.book||""):"")+'" placeholder="z.B. Arban"/></div>'
+    +'<div class="field"><div class="field-label">Seite</div><input class="inp" id="tk_page" type="number" value="'+(ex&&ex.page?ex.page:"")+'"/></div>'
+    +'<div class="field"><div class="field-label">Nr.</div><input class="inp" id="tk_nr" value="'+(ex?esc(ex.nr||""):"")+'" placeholder="z.B. 14"/></div></div>'
+    +'<div class="field"><div class="field-label">Priorität / Häufigkeit</div>'
+    +'<div class="chip-group">';
+  for(var p=1;p<=5;p++){
+    h+='<button class="chip '+((!ex&&p===3)||(ex&&(ex.prio||3)===p)?"active":"")+'" onclick="selectChip(this,\'tk_prio\',\''+p+'\')" data-val="'+p+'" style="color:'+PRIO_COLS[p]+'">'+PRIO_LABELS[p]+'</button>';
+  }
+  h+='</div><input type="hidden" id="tk_prio" value="'+(ex?ex.prio||3:3)+'"/></div>'
+    +'<div class="field"><div class="field-label">Zeit (Minuten)</div><input class="inp" id="tk_dauer" type="number" min="5" max="60" step="5" value="'+(ex?ex.dauer||10:10)+'"/></div>'
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>';
+  if(ex)h+='<button class="btn btn-danger btn-sm" onclick="deleteTechnik(\''+ex.id+'\')">Löschen</button>';
+  h+='<button class="btn btn-primary" onclick="saveTechnik('+(ex?'\''+ex.id+'\'':'null')+')">Speichern</button></div>';
+  openAddSheet(ex?"Übung bearbeiten":"Übung hinzufügen",h);
+}
+function editTechnik(id){openAddTechnik(id);}
+function saveTechnik(id){
+  var name=document.getElementById("tk_name").value.trim();
+  if(!name){popup("Name fehlt","var(--red)");return;}
+  var item={id:id||uid(),name:name,book:document.getElementById("tk_book").value.trim(),page:document.getElementById("tk_page").value.trim(),nr:document.getElementById("tk_nr").value.trim(),prio:parseInt(document.getElementById("tk_prio").value)||3,dauer:parseInt(document.getElementById("tk_dauer").value)||10};
+  if(id)APP.technik=APP.technik.map(function(t){return t.id===id?item:t;});else APP.technik.push(item);
+  saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gespeichert ✓");renderTechnik();
+}
+function deleteTechnik(id){confirm_("Löschen?","Diese Übung wirklich entfernen?",function(){APP.technik=APP.technik.filter(function(t){return t.id!==id;});saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gelöscht");renderTechnik();});}
+
+// ══════════════════════════════════════════════════════
+// ORCH/NF TAB
+// ══════════════════════════════════════════════════════
+function renderOrch(){
+  var h='<button class="btn btn-primary btn-full" onclick="openAddOrch()">+ Orchester / Nebenfach hinzufügen</button>';
+  var active=APP.orch.filter(function(o){return o.active;});
+  var inactive=APP.orch.filter(function(o){return!o.active;});
+  if(!APP.orch.length){h+='<div class="empty-state" style="margin-top:20px"><div class="empty-icon">🎼</div><div class="empty-title">Noch nichts eingetragen</div></div>';document.getElementById("mc").innerHTML=h;return;}
+  if(active.length){h+='<div style="margin-top:14px"><div class="section-label">Aktiv</div>';active.forEach(function(o){h+=orchCard(o);});h+='</div>';}
+  if(inactive.length){h+='<div style="margin-top:14px"><div class="section-label">Inaktiv</div>';inactive.forEach(function(o){h+=orchCard(o);});h+='</div>';}
+  document.getElementById("mc").innerHTML=h;
+}
+
+function orchCard(o){
+  var daysLeft=o.until?daysBetween(today(),o.until):null;
+  var urgency=daysLeft!==null?(daysLeft<=1?"red":daysLeft<=3?"yellow":daysLeft<=7?"accent":"green"):"gray";
+  var pct=o.from&&o.until?Math.min(100,Math.max(0,Math.round((daysBetween(o.from,today())/daysBetween(o.from,o.until))*100))):0;
+  return'<div class="list-item">'
+    +'<div class="list-item-body">'
+    +'<div class="list-item-title">'+esc(o.name)+'<span class="pill pill-'+(o.type==="orch"?"green":"purple")+'">'+( o.type==="orch"?"Orchester":"Nebenfach")+'</span></div>'
+    +'<div class="list-item-meta"><span class="pill pill-purple">'+esc(o.instrument||"")+'</span>'
+    +(o.until?'<span class="pill pill-'+urgency+'">bis '+o.until.slice(5).replace("-",".")+(daysLeft!==null?" ("+daysLeft+"T)":"")+'</span>':"")
+    +'<span class="pill pill-gray">'+(o.dauer||20)+"' pro Einheit</span>"
+    +(o.active?'<span class="pill pill-green">Aktiv</span>':'<span class="pill pill-gray">Inaktiv</span>')
+    +'</div>'
+    +(o.until?'<div class="deadline-bar"><div class="deadline-fill" style="width:'+pct+'%;background:var(--'+urgency+')"></div></div>':'')
+    +'</div>'
+    +'<div class="list-item-actions"><button class="icon-action" onclick="editOrch(\''+o.id+'\')">✏️</button><button class="icon-action" onclick="deleteOrch(\''+o.id+'\')">🗑</button></div>'
+    +'</div>';
+}
+
+function openAddOrch(id){
+  var ex=id?APP.orch.find(function(o){return o.id===id;}):null;
+  var instrs=APP.settings.instruments;
+  var h='<div class="field"><div class="field-label">Typ</div><div class="chip-group">'
+    +'<button class="chip '+((!ex||ex.type==="orch")?"active":"")+'" onclick="selectChip(this,\'or_type\',\'orch\')" data-val="orch">Orchester</button>'
+    +'<button class="chip '+(ex&&ex.type==="nf"?"active":"")+'" onclick="selectChip(this,\'or_type\',\'nf\')" data-val="nf">Nebenfach</button>'
+    +'</div><input type="hidden" id="or_type" value="'+(ex?ex.type:"orch")+'"/></div>'
+    +'<div class="field"><div class="field-label">Name des Werkes *</div><input class="inp" id="or_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Mahler 5, Trompetenauszüge"/></div>'
+    +'<div class="field"><div class="field-label">Instrument</div><select class="inp" id="or_instr">';
+  instrs.forEach(function(i){h+='<option value="'+i+'"'+(ex&&ex.instrument===i?" selected":"")+'>'+i+'</option>';});
+  h+='</select></div>'
+    +'<div class="row"><div class="field"><div class="field-label">Üben ab</div><input class="inp" id="or_from" type="date" value="'+(ex?ex.from||"":today())+'"/></div>'
+    +'<div class="field"><div class="field-label">Muss können bis</div><input class="inp" id="or_until" type="date" value="'+(ex?ex.until||"":"")+'"/></div></div>'
+    +'<div class="field"><div class="field-label">Zeit pro Übeinheit (Min)</div><input class="inp" id="or_dauer" type="number" min="5" max="120" step="5" value="'+(ex?ex.dauer||20:20)+'"/></div>'
+    +'<div class="toggle-row"><label for="or_active">Aktiv (in Plan aufnehmen)</label><label class="toggle"><input type="checkbox" id="or_active"'+(ex&&ex.active!==false?" checked":""+(ex?"":"")+(!ex?" checked":""))+'/><span class="slider"></span></label></div>'
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>';
+  if(ex)h+='<button class="btn btn-danger btn-sm" onclick="deleteOrch(\''+ex.id+'\')">Löschen</button>';
+  h+='<button class="btn btn-primary" onclick="saveOrch('+(ex?'\''+ex.id+'\'':'null')+')">Speichern</button></div>';
+  openAddSheet(ex?"Bearbeiten":"Orchester / Nebenfach",h);
+}
+function editOrch(id){openAddOrch(id);}
+function saveOrch(id){
+  var name=document.getElementById("or_name").value.trim();
+  if(!name){popup("Name fehlt","var(--red)");return;}
+  var item={id:id||uid(),type:document.getElementById("or_type").value,name:name,instrument:document.getElementById("or_instr").value,from:document.getElementById("or_from").value,until:document.getElementById("or_until").value,dauer:parseInt(document.getElementById("or_dauer").value)||20,active:document.getElementById("or_active").checked};
+  if(id)APP.orch=APP.orch.map(function(o){return o.id===id?item:o;});else APP.orch.push(item);
+  saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gespeichert ✓");renderOrch();
+}
+function deleteOrch(id){confirm_("Löschen?","Wirklich entfernen?",function(){APP.orch=APP.orch.filter(function(o){return o.id!==id;});saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gelöscht");renderOrch();});}
+
+// ══════════════════════════════════════════════════════
+// TERMINE TAB
+// ══════════════════════════════════════════════════════
+function renderTermine(){
+  var sem=APP.termine.semester;
+  var semMissing=!sem.start||!sem.end;
+  var h="";
+  if(semMissing){
+    h+='<div style="background:#ffa50215;border:1px solid #ffa50240;border-radius:10px;padding:14px;margin-bottom:14px">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:6px">⚠️ Semesterzeitraum nicht eingetragen</div>'
+      +'<div style="font-size:12px;color:#aaa;margin-bottom:10px">Der Stundenplan gilt nur während des Semesters.</div>'
+      +'<button class="btn btn-orange btn-sm" onclick="openSemester()">Jetzt eintragen</button></div>';
+  } else {
+    h+='<div class="card" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<div><div class="section-label">Semester</div><div style="font-size:13px;font-weight:600">'+sem.start.slice(5).replace("-",".")+' – '+sem.end.slice(5).replace("-",".")+'</div></div>'
+      +'<button class="icon-btn" onclick="openSemester()">✏️</button></div></div>';
+  }
+  h+='<button class="btn btn-primary btn-full" onclick="openAddStundenplan()">+ Stundenplan eintragen</button>';
+  if(APP.termine.stundenplan.length){
+    h+='<div style="margin-top:14px"><div class="section-label">Stundenplan (wiederkehrend)</div>';
+    APP.termine.stundenplan.forEach(function(sp){
+      h+='<div class="list-item"><div class="list-item-body">'
+        +'<div class="list-item-title">'+esc(sp.name)+'</div>'
+        +'<div class="list-item-meta"><span class="pill pill-accent">'+DAYS_FULL[DAYS_DE.indexOf(sp.weekday)]+'</span> <span class="pill pill-gray">'+sp.start+'–'+sp.end+'</span>'
+        +(sp.travelTo?'<span class="pill pill-gray">Hinfahrt: '+sp.travelTo+' Min</span>':'')
+        +(sp.travelBack?'<span class="pill pill-gray">Rückfahrt: '+sp.travelBack+' Min</span>':'')
+        +'</div></div>'
+        +'<div class="list-item-actions"><button class="icon-action" onclick="editSP(\''+sp.id+'\')">✏️</button><button class="icon-action" onclick="deleteSP(\''+sp.id+'\')">🗑</button></div></div>';
+    });
+    h+='</div>';
+  }
+  h+='<button class="btn btn-ghost btn-full" style="margin-top:10px" onclick="openAddOtherTermin()">+ Einzeltermin</button>';
+  if(APP.termine.other.length){
+    h+='<div style="margin-top:14px"><div class="section-label">Einzeltermine</div>';
+    APP.termine.other.sort(function(a,b){return a.date>b.date?1:-1;}).forEach(function(t){
+      var isPast=t.date<today();
+      h+='<div class="list-item" style="'+(isPast?"opacity:0.45":"")+'"><div class="list-item-body">'
+        +'<div class="list-item-title">'+esc(t.name)+'</div>'
+        +'<div class="list-item-meta"><span class="pill pill-accent">'+fmtDate(t.date)+'</span> <span class="pill pill-gray">'+t.start+'–'+t.end+'</span>'
+        +(t.travel?'<span class="pill pill-gray">Fahrt: '+t.travel+' Min</span>':'')
+        +'</div></div>'
+        +'<div class="list-item-actions"><button class="icon-action" onclick="deleteOtherTermin(\''+t.id+'\')">🗑</button></div></div>';
+    });
+    h+='</div>';
+  }
+  document.getElementById("mc").innerHTML=h;
+}
+
+function fmtDate(s){if(!s)return"";var p=s.split("-");return p[2]+"."+p[1]+".";}
+
+function openSemester(){
+  var sem=APP.termine.semester;
+  var h='<div class="row"><div class="field"><div class="field-label">Start</div><input class="inp" id="sem_start" type="date" value="'+(sem.start||"")+'"/></div><div class="field"><div class="field-label">Ende</div><input class="inp" id="sem_end" type="date" value="'+(sem.end||"")+'"/></div></div>'
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button><button class="btn btn-primary" onclick="saveSemester()">Speichern</button></div>';
+  openAddSheet("Semesterzeitraum",h);
+}
+function saveSemester(){APP.termine.semester={start:document.getElementById("sem_start").value,end:document.getElementById("sem_end").value};saveApp();closeAdd();popup("Semester gespeichert ✓");renderTermine();}
+
+function openAddStundenplan(id){
+  var ex=id?APP.termine.stundenplan.find(function(s){return s.id===id;}):null;
+  var h='<div class="field"><div class="field-label">Bezeichnung *</div><input class="inp" id="sp_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Gehörbildung, Musiktheorie"/></div>'
+    +'<div class="field"><div class="field-label">Wochentag</div><select class="inp" id="sp_day">';
+  DAYS_DE.slice(0,5).forEach(function(d,i){h+='<option value="'+d+'"'+(ex&&ex.weekday===d?" selected":"")+'>'+DAYS_FULL[i]+'</option>';});
+  h+='</select></div>'
+    +'<div class="row"><div class="field"><div class="field-label">Von</div><input class="inp" id="sp_start" type="time" value="'+(ex?ex.start:"08:00")+'"/></div><div class="field"><div class="field-label">Bis</div><input class="inp" id="sp_end" type="time" value="'+(ex?ex.end:"10:00")+'"/></div></div>'
+    +'<div class="row"><div class="field"><div class="field-label">Fahrt hin (Min)</div><input class="inp" id="sp_travTo" type="number" min="0" max="120" value="'+(ex?ex.travelTo||"":"")+'" placeholder="0"/></div><div class="field"><div class="field-label">Fahrt zurück (Min)</div><input class="inp" id="sp_travBack" type="number" min="0" max="120" value="'+(ex?ex.travelBack||"":"")+'" placeholder="0"/></div></div>'
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>';
+  if(ex)h+='<button class="btn btn-danger btn-sm" onclick="deleteSP(\''+ex.id+'\')">Löschen</button>';
+  h+='<button class="btn btn-primary" onclick="saveSP('+(ex?'\''+ex.id+'\'':'null')+')">Speichern</button></div>';
+  openAddSheet("Stundenplan",h);
+}
+function editSP(id){openAddStundenplan(id);}
+function saveSP(id){
+  var name=document.getElementById("sp_name").value.trim();if(!name){popup("Name fehlt","var(--red)");return;}
+  var item={id:id||uid(),name:name,weekday:document.getElementById("sp_day").value,start:document.getElementById("sp_start").value,end:document.getElementById("sp_end").value,travelTo:parseInt(document.getElementById("sp_travTo").value)||0,travelBack:parseInt(document.getElementById("sp_travBack").value)||0};
+  if(id)APP.termine.stundenplan=APP.termine.stundenplan.map(function(s){return s.id===id?item:s;});else APP.termine.stundenplan.push(item);
+  saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gespeichert ✓");renderTermine();
+}
+function deleteSP(id){confirm_("Löschen?","Stundenplan-Eintrag entfernen?",function(){APP.termine.stundenplan=APP.termine.stundenplan.filter(function(s){return s.id!==id;});saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gelöscht");renderTermine();});}
+
+function openAddOtherTermin(){
+  var h='<div class="field"><div class="field-label">Bezeichnung *</div><input class="inp" id="ot_name" placeholder="z.B. Probe, Konzert, Arzttermin"/></div>'
+    +'<div class="field"><div class="field-label">Datum</div><input class="inp" id="ot_date" type="date" value="'+today()+'"/></div>'
+    +'<div class="row"><div class="field"><div class="field-label">Von</div><input class="inp" id="ot_start" type="time" value="10:00"/></div><div class="field"><div class="field-label">Bis</div><input class="inp" id="ot_end" type="time" value="12:00"/></div></div>'
+    +'<div class="field"><div class="field-label">Fahrtzeit (Min, je Richtung)</div><input class="inp" id="ot_travel" type="number" min="0" max="180" placeholder="0"/></div>'
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button><button class="btn btn-primary" onclick="saveOtherTermin()">Speichern</button></div>';
+  openAddSheet("Einzeltermin",h);
+}
+function saveOtherTermin(){
+  var name=document.getElementById("ot_name").value.trim();if(!name){popup("Name fehlt","var(--red)");return;}
+  var item={id:uid(),name:name,date:document.getElementById("ot_date").value,start:document.getElementById("ot_start").value,end:document.getElementById("ot_end").value,travel:parseInt(document.getElementById("ot_travel").value)||0};
+  APP.termine.other.push(item);saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gespeichert ✓");renderTermine();
+}
+function deleteOtherTermin(id){confirm_("Löschen?","Termin entfernen?",function(){APP.termine.other=APP.termine.other.filter(function(t){return t.id!==id;});saveApp();autoGenerate(todayDayDE());popup("Gelöscht");renderTermine();});}
+
+// ══════════════════════════════════════════════════════
+// PRIVAT TAB
+// ══════════════════════════════════════════════════════
+function renderPrivat(){
+  var h='<div style="display:flex;gap:8px;margin-bottom:4px"><button class="btn btn-primary" style="flex:1" onclick="openAddAuftritt()">+ Auftritt</button><button class="btn btn-ghost" style="flex:1" onclick="openAddProjekt()">+ Projekt</button></div>';
+  var auftritte=APP.privat.auftritte.sort(function(a,b){return a.date>b.date?1:-1;});
+  var projekte=APP.privat.projekte.sort(function(a,b){return a.deadline>b.deadline?1:-1;});
+  if(auftritte.length){
+    h+='<div style="margin-top:14px"><div class="section-label">Auftritte</div>';
+    auftritte.forEach(function(a){
+      var daysLeft=daysBetween(today(),a.date);var urg=daysLeft<=3?"red":daysLeft<=7?"yellow":"green";
+      h+='<div class="list-item"><div class="list-item-body">'
+        +'<div class="list-item-title">'+esc(a.name)+'</div>'
+        +'<div class="list-item-meta"><span class="pill pill-'+urg+'">'+fmtDate(a.date)+(daysLeft>=0?' ('+daysLeft+'T)':'')+'</span>'
+        +(a.location?'<span class="pill pill-gray">'+esc(a.location)+'</span>':'')
+        +(a.needsPractice?'<span class="pill pill-orange">Üben: '+esc(a.practiceWhat||"")+'</span>':'')
+        +'</div></div>'
+        +'<div class="list-item-actions"><button class="icon-action" onclick="editAuftritt(\''+a.id+'\')">✏️</button><button class="icon-action" onclick="deleteAuftritt(\''+a.id+'\')">🗑</button></div></div>';
+    });
+    h+='</div>';
+  }
+  if(projekte.length){
+    h+='<div style="margin-top:14px"><div class="section-label">Projekte</div>';
+    projekte.forEach(function(p){
+      var daysLeft=daysBetween(today(),p.deadline);var urg=daysLeft<=3?"red":daysLeft<=7?"yellow":"green";
+      h+='<div class="list-item"><div class="list-item-body">'
+        +'<div class="list-item-title">'+esc(p.name)+'</div>'
+        +'<div class="list-item-meta"><span class="pill pill-'+urg+'">Deadline: '+fmtDate(p.deadline)+(daysLeft>=0?' ('+daysLeft+'T)':'')+'</span>'
+        +(p.needsPractice?'<span class="pill pill-orange">Üben: '+esc(p.practiceWhat||"")+'</span>':'')
+        +'</div></div>'
+        +'<div class="list-item-actions"><button class="icon-action" onclick="editProjekt(\''+p.id+'\')">✏️</button><button class="icon-action" onclick="deleteProjekt(\''+p.id+'\')">🗑</button></div></div>';
+    });
+    h+='</div>';
+  }
+  if(!auftritte.length&&!projekte.length)h+='<div class="empty-state" style="margin-top:20px"><div class="empty-icon">🎤</div><div class="empty-title">Noch nichts eingetragen</div></div>';
+  document.getElementById("mc").innerHTML=h;
+}
+
+function openAddAuftritt(id){
+  var ex=id?APP.privat.auftritte.find(function(a){return a.id===id;}):null;
+  var h='<div class="field"><div class="field-label">Name *</div><input class="inp" id="au_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Kammerkonzert"/></div>'
+    +'<div class="row"><div class="field"><div class="field-label">Datum</div><input class="inp" id="au_date" type="date" value="'+(ex?ex.date:today())+'"/></div>'
+    +'<div class="field"><div class="field-label">Ort</div><input class="inp" id="au_loc" value="'+(ex?esc(ex.location||""):"")+'" placeholder="Ort"/></div></div>'
+    +'<div class="toggle-row"><label for="au_np">Muss dafür geübt werden?</label><label class="toggle"><input type="checkbox" id="au_np"'+(ex&&ex.needsPractice?" checked":"")+' onchange="togglePracticeFields(\'au\',this.checked)"/><span class="slider"></span></label></div>'
+    +'<div id="au_practFields" style="'+(ex&&ex.needsPractice?"":"display:none")+'">'
+    +'<div class="field"><div class="field-label">Was üben?</div><input class="inp" id="au_what" value="'+(ex?esc(ex.practiceWhat||""):"")+'" placeholder="z.B. Solopart, spezifische Stelle..."/></div>'
+    +'<div class="row"><div class="field"><div class="field-label">Üben ab</div><input class="inp" id="au_from" type="date" value="'+(ex?ex.practiceFrom||today():today())+'"/></div>'
+    +'<div class="field"><div class="field-label">Min/Tag</div><input class="inp" id="au_daily" type="number" min="5" max="120" step="5" value="'+(ex?ex.practiceDailyMin||20:20)+'"/></div></div></div>'
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>';
+  if(ex)h+='<button class="btn btn-danger btn-sm" onclick="deleteAuftritt(\''+ex.id+'\')">Löschen</button>';
+  h+='<button class="btn btn-primary" onclick="saveAuftritt('+(ex?'\''+ex.id+'\'':'null')+')">Speichern</button></div>';
+  openAddSheet(ex?"Auftritt bearbeiten":"Auftritt hinzufügen",h);
+}
+function editAuftritt(id){openAddAuftritt(id);}
+function togglePracticeFields(prefix,show){document.getElementById(prefix+"_practFields").style.display=show?"":"none";}
+function saveAuftritt(id){
+  var name=document.getElementById("au_name").value.trim();if(!name){popup("Name fehlt","var(--red)");return;}
+  var np=document.getElementById("au_np").checked;
+  var item={id:id||uid(),name:name,date:document.getElementById("au_date").value,location:document.getElementById("au_loc").value.trim(),needsPractice:np,practiceWhat:np?document.getElementById("au_what").value.trim():"",practiceFrom:np?document.getElementById("au_from").value:"",practiceDailyMin:np?parseInt(document.getElementById("au_daily").value)||20:0};
+  if(id)APP.privat.auftritte=APP.privat.auftritte.map(function(a){return a.id===id?item:a;});else APP.privat.auftritte.push(item);
+  saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gespeichert ✓");renderPrivat();
+}
+function deleteAuftritt(id){confirm_("Löschen?","Auftritt entfernen?",function(){APP.privat.auftritte=APP.privat.auftritte.filter(function(a){return a.id!==id;});saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gelöscht");renderPrivat();});}
+
+function openAddProjekt(id){
+  var ex=id?APP.privat.projekte.find(function(p){return p.id===id;}):null;
+  var h='<div class="field"><div class="field-label">Projektname *</div><input class="inp" id="pj_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Recording Session"/></div>'
+    +'<div class="field"><div class="field-label">Deadline</div><input class="inp" id="pj_deadline" type="date" value="'+(ex?ex.deadline:today())+'"/></div>'
+    +'<div class="toggle-row"><label for="pj_np">Muss dafür geübt werden?</label><label class="toggle"><input type="checkbox" id="pj_np"'+(ex&&ex.needsPractice?" checked":"")+ ' onchange="togglePracticeFields(\'pj\',this.checked)"/><span class="slider"></span></label></div>'
+    +'<div id="pj_practFields" style="'+(ex&&ex.needsPractice?"":"display:none")+'">'
+    +'<div class="field"><div class="field-label">Was üben?</div><input class="inp" id="pj_what" value="'+(ex?esc(ex.practiceWhat||""):"")+'" placeholder="Was muss geübt werden?"/></div>'
+    +'<div class="row"><div class="field"><div class="field-label">Üben ab</div><input class="inp" id="pj_from" type="date" value="'+(ex?ex.practiceFrom||today():today())+'"/></div>'
+    +'<div class="field"><div class="field-label">Min/Tag</div><input class="inp" id="pj_daily" type="number" min="5" max="120" step="5" value="'+(ex?ex.practiceDailyMin||20:20)+'"/></div></div></div>'
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>';
+  if(ex)h+='<button class="btn btn-danger btn-sm" onclick="deleteProjekt(\''+ex.id+'\')">Löschen</button>';
+  h+='<button class="btn btn-primary" onclick="saveProjekt('+(ex?'\''+ex.id+'\'':'null')+')">Speichern</button></div>';
+  openAddSheet(ex?"Projekt bearbeiten":"Projekt hinzufügen",h);
+}
+function editProjekt(id){openAddProjekt(id);}
+function saveProjekt(id){
+  var name=document.getElementById("pj_name").value.trim();if(!name){popup("Name fehlt","var(--red)");return;}
+  var np=document.getElementById("pj_np").checked;
+  var item={id:id||uid(),name:name,deadline:document.getElementById("pj_deadline").value,needsPractice:np,practiceWhat:np?document.getElementById("pj_what").value.trim():"",practiceFrom:np?document.getElementById("pj_from").value:"",practiceDailyMin:np?parseInt(document.getElementById("pj_daily").value)||20:0};
+  if(id)APP.privat.projekte=APP.privat.projekte.map(function(p){return p.id===id?item:p;});else APP.privat.projekte.push(item);
+  saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gespeichert ✓");renderPrivat();
+}
+function deleteProjekt(id){confirm_("Löschen?","Projekt entfernen?",function(){APP.privat.projekte=APP.privat.projekte.filter(function(p){return p.id!==id;});saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gelöscht");renderPrivat();});}
+
+// ══════════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════════
+function openSettings(){
+  var S=APP.settings;
+  document.getElementById("s_blockMin").value=S.blockMin;
+  document.getElementById("s_pauseMin").value=S.pauseMin;
+  document.getElementById("s_startTime").value=S.startTime;
+  document.getElementById("s_endTime").value=S.endTime;
+  document.getElementById("s_soloRatio").value=S.soloRatio;
+  document.getElementById("s_soloLbl").textContent=S.soloRatio;
+  document.getElementById("s_techLbl").textContent=100-S.soloRatio;
+  document.getElementById("s_etuedeOn").checked=S.etuedeOn;
+  document.getElementById("s_etuedeFields").style.display=S.etuedeOn?"":"none";
+  document.getElementById("s_etuedeDays").value=S.etuedeDays;
+  document.getElementById("s_etuedeMin").value=S.etuedeMin;
+  document.getElementById("s_orchOn").checked=S.orchOn;
+  // Instruments
+  document.querySelectorAll("#s_instruments .chip").forEach(function(c){c.classList.toggle("active",S.instruments.indexOf(c.dataset.instr)>=0);});
+  document.getElementById("settingsOverlay").classList.add("open");
+}
+function toggleSettingsEtuede(){document.getElementById("s_etuedeFields").style.display=document.getElementById("s_etuedeOn").checked?"":"none";}
+function saveSettings(){
+  APP.settings.blockMin=parseInt(document.getElementById("s_blockMin").value)||45;
+  APP.settings.pauseMin=parseInt(document.getElementById("s_pauseMin").value)||15;
+  APP.settings.startTime=document.getElementById("s_startTime").value;
+  APP.settings.endTime=document.getElementById("s_endTime").value;
+  APP.settings.soloRatio=parseInt(document.getElementById("s_soloRatio").value)||50;
+  APP.settings.etuedeOn=document.getElementById("s_etuedeOn").checked;
+  APP.settings.etuedeDays=parseInt(document.getElementById("s_etuedeDays").value)||5;
+  APP.settings.etuedeMin=parseInt(document.getElementById("s_etuedeMin").value)||30;
+  APP.settings.orchOn=document.getElementById("s_orchOn").checked;
+  APP.settings.instruments=Array.from(document.querySelectorAll("#s_instruments .chip.active")).map(function(c){return c.dataset.instr;});
+  saveApp();closeSettings();autoGenerate(todayDayDE());popup("Einstellungen gespeichert ✓");
+}
+function closeSettings(){document.getElementById("settingsOverlay").classList.remove("open");}
+document.getElementById("settingsOverlay").onclick=function(e){if(e.target===this)closeSettings();};
+
+// ══════════════════════════════════════════════════════
+// HFU
+// ══════════════════════════════════════════════════════
+function openHfu(){
+  document.getElementById("hfu_day").value=APP.hfu.day||"";
+  document.getElementById("hfu_start").value=APP.hfu.start||"10:00";
+  document.getElementById("hfu_end").value=APP.hfu.end||"12:00";
+  document.getElementById("hfuOverlay").classList.add("open");
+}
+function saveHfu(){
+  APP.hfu={day:document.getElementById("hfu_day").value,start:document.getElementById("hfu_start").value,end:document.getElementById("hfu_end").value};
+  saveApp();closeHfu();autoGenerate(todayDayDE());popup("HFU gespeichert ✓");
+}
+function closeHfu(){document.getElementById("hfuOverlay").classList.remove("open");}
+document.getElementById("hfuOverlay").onclick=function(e){if(e.target===this)closeHfu();};
+
+// ══════════════════════════════════════════════════════
+// GENERIC ADD SHEET
+// ══════════════════════════════════════════════════════
+function openAddSheet(title,content){
+  document.getElementById("addTitle").textContent=title;
+  document.getElementById("addContent").innerHTML=content;
+  document.getElementById("addOverlay").classList.add("open");
+}
+function closeAdd(){document.getElementById("addOverlay").classList.remove("open");}
+document.getElementById("addOverlay").onclick=function(e){if(e.target===this)closeAdd();};
+
+// Chip select helper
+function selectChip(btn,hiddenId,val){
+  var group=btn.parentElement;
+  group.querySelectorAll(".chip").forEach(function(c){c.classList.remove("active");});
+  btn.classList.add("active");
+  document.getElementById(hiddenId).value=val;
+  // Trigger onchange if exists
+  var inp=document.getElementById(hiddenId);
+  if(inp.onchange)inp.onchange();
+}
+
+// Instrument chips toggle
+document.querySelectorAll("#s_instruments .chip").forEach(function(c){
+  c.onclick=function(){c.classList.toggle("active");};
+});
+
+// ══════════════════════════════════════════════════════
+// SEMESTER POPUP CHECK
+// ══════════════════════════════════════════════════════
+function checkSemesterPopup(){
+  if(!APP.termine.semester.start&&!localStorage.getItem("semPopupShown")){
+    setTimeout(function(){
+      confirm_("Semesterzeitraum","Du hast noch keinen Semesterzeitraum eingetragen. Damit der Stundenplan korrekt funktioniert, trage bitte den Zeitraum ein.",function(){
+        localStorage.setItem("semPopupShown","1");
+        setTab("termine");setTimeout(openSemester,200);
+      },"Jetzt eintragen");
+    },800);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// WEEKLY RESET
+// ══════════════════════════════════════════════════════
+function checkWeeklyReset(){
+  var storedWeek=localStorage.getItem("lastWeek");
+  var currentWeek=getMonday();
+  if(storedWeek!==currentWeek){
+    // New week — reset day adjustments and regenerate
+    APP.dayAdjust={};
+    saveApp();
+    generatePlan();
+    localStorage.setItem("lastWeek",currentWeek);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
+checkWeeklyReset();
+checkSemesterPopup();
+generatePlan();
+// ══════════════════════════════════════════════════════
+// STATISTIK TAB
+// ══════════════════════════════════════════════════════
+function renderStats(){
+  var weekDates=getWeekDates();
+  var todayStr=today();
+  var S=APP.settings;
+
+  // Collect all blocks from current week plan
+  var totalMin=0, soloMin=0, techMin=0, orchMin=0, privMin=0;
+  var soloByPiece={};   // name -> minutes
+  var techByEx={};      // name -> minutes
+  var daysPlanned=0;
+
+  DAYS_DE.forEach(function(day,di){
+    var pd=APP.plan[day];
+    if(!pd||!pd.blocks||!pd.blocks.length)return;
+    var dateStr=weekDates[di];
+    if(dateStr>todayStr)return; // only count past+today
+    var anyDone=false;
+    pd.blocks.forEach(function(block,bi){
+      if(!isBlockDone(dateStr,bi))return; // only count done blocks
+      anyDone=true;
+      var bMin=S.blockMin;
+      totalMin+=bMin;
+      if(block.type==="solo"){
+        soloMin+=bMin;
+        if(block.items)block.items.forEach(function(item){
+          if(item.type==="etuede"){soloByPiece["Wochen-Etüde"]=(soloByPiece["Wochen-Etüde"]||0)+(item.dauer||0);}
+          else if(item.name){soloByPiece[item.name]=(soloByPiece[item.name]||0)+(item.dauer||bMin);}
+        });
+      } else if(block.type==="technik"){
+        techMin+=bMin;
+        if(block.items)block.items.forEach(function(item){
+          if(item.name)techByEx[item.name]=(techByEx[item.name]||0)+(item.dauer||0);
+        });
+      } else if(block.type==="orch"){
+        orchMin+=bMin;
+      } else {
+        privMin+=bMin;
+      }
+    });
+    if(anyDone)daysPlanned++;
+  });
+
+  // Also include future blocks for weekly projection
+  var totalWeekMin=0,soloWeekMin=0,techWeekMin=0;
+  DAYS_DE.forEach(function(day,di){
+    var pd=APP.plan[day];
+    if(!pd||!pd.blocks)return;
+    pd.blocks.forEach(function(block){
+      totalWeekMin+=S.blockMin;
+      if(block.type==="solo")soloWeekMin+=S.blockMin;
+      if(block.type==="technik")techWeekMin+=S.blockMin;
+    });
+  });
+
+  function fmtMin(m){
+    if(m<=0)return"0 Min";
+    var h=Math.floor(m/60),min=m%60;
+    return h>0?(h+"h"+(min>0?" "+min+"m":"")):(min+"m");
+  }
+  function pct(a,b){return b>0?Math.round(a/b*100):0;}
+  function bar(val,total,color){
+    var p=pct(val,total);
+    return'<div style="background:#1e1e30;border-radius:4px;height:8px;margin-top:5px;overflow:hidden"><div style="width:'+p+'%;height:100%;background:'+color+';border-radius:4px;transition:width 0.4s"></div></div>';
+  }
+
+  var h='<div style="font-size:18px;font-weight:700;margin-bottom:4px">Wochenstatistik 📊</div>';
+  h+='<div style="font-size:12px;color:#888;margin-bottom:18px">Aktuelle Woche · '+( daysPlanned>0?daysPlanned+" Tage bisher":"noch keine Daten")+'</div>';
+
+  if(totalMin===0&&totalWeekMin===0||(!Object.keys(APP.done).length&&totalWeekMin>0)){
+    h+='<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">Noch keine Daten</div><div class="empty-sub">Hake im Plan-Tab Blöcke ab die du erledigt hast. Dann erscheinen hier deine echten Probezeiten.</div></div>';
+    document.getElementById("mc").innerHTML=h;return;
+  }
+
+  // Overview card
+  h+='<div class="card" style="margin-bottom:12px">';
+  h+='<div class="card-title">Gesamtübersicht (Woche)</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+  h+='<div style="background:var(--input-bg);border-radius:8px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--accent)">'+fmtMin(totalWeekMin)+'</div><div style="font-size:11px;color:#888;margin-top:3px">Gesamt geplant</div></div>';
+  h+='<div style="background:var(--input-bg);border-radius:8px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--green)">'+fmtMin(totalMin)+'</div><div style="font-size:11px;color:#888;margin-top:3px">Bisher diese Woche</div></div>';
+  h+='</div>';
+  // Breakdown bars
+  h+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:var(--accent);font-weight:700">🎵 Solo</span><span style="color:#888">'+fmtMin(soloWeekMin)+' ('+pct(soloWeekMin,totalWeekMin)+'%)</span></div>'+bar(soloWeekMin,totalWeekMin,"var(--accent)")+'</div>';
+  h+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:var(--orange);font-weight:700">⚙️ Technik</span><span style="color:#888">'+fmtMin(techWeekMin)+' ('+pct(techWeekMin,totalWeekMin)+'%)</span></div>'+bar(techWeekMin,totalWeekMin,"var(--orange)")+'</div>';
+  if(orchMin>0)h+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:var(--green);font-weight:700">🎼 Orch/NF</span><span style="color:#888">'+fmtMin(orchMin)+'</span></div>'+bar(orchMin,totalMin,"var(--green)")+'</div>';
+  if(privMin>0)h+='<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:#ff6b9d;font-weight:700">🎤 Privat</span><span style="color:#888">'+fmtMin(privMin)+'</span></div>'+bar(privMin,totalMin,"#ff6b9d")+'</div>';
+  h+='</div>';
+
+  // Solo breakdown
+  var soloPieces=Object.keys(soloByPiece);
+  if(soloPieces.length>0){
+    h+='<div class="card" style="margin-bottom:12px"><div class="card-title">🎵 Solo-Literatur</div>';
+    var soloTotal=soloPieces.reduce(function(s,k){return s+soloByPiece[k];},0);
+    soloPieces.sort(function(a,b){return soloByPiece[b]-soloByPiece[a];}).forEach(function(name){
+      var m=soloByPiece[name],p2=pct(m,soloTotal);
+      h+='<div style="margin-bottom:10px">';
+      h+='<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span style="font-weight:600">'+esc(name)+'</span><span style="color:#888">'+fmtMin(m)+' ('+p2+'%)</span></div>';
+      h+=bar(m,soloTotal,"var(--accent)");
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+
+  // Technik breakdown
+  var techExes=Object.keys(techByEx);
+  if(techExes.length>0){
+    h+='<div class="card" style="margin-bottom:12px"><div class="card-title">⚙️ Technik-Übungen</div>';
+    var techTotal=techExes.reduce(function(s,k){return s+techByEx[k];},0);
+    techExes.sort(function(a,b){return techByEx[b]-techByEx[a];}).forEach(function(name){
+      var m=techByEx[name],p2=pct(m,techTotal);
+      var exObj=APP.technik.find(function(t){return t.name===name;});
+      var prioCol=exObj?PRIO_COLS[exObj.prio||3]:"#888";
+      h+='<div style="margin-bottom:10px">';
+      h+='<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span style="font-weight:600;color:'+prioCol+'">'+esc(name)+'</span><span style="color:#888">'+fmtMin(m)+' ('+p2+'%)</span></div>';
+      h+=bar(m,techTotal,prioCol);
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+
+  // Daily breakdown
+  h+='<div class="card"><div class="card-title">Tägliche Übersicht</div>';
+  DAYS_DE.forEach(function(day,di){
+    var pd=APP.plan[day];
+    var dateStr=weekDates[di];
+    if(!pd||!pd.blocks||!pd.blocks.length)return;
+    var dayTotal=pd.blocks.length*S.blockMin;
+    var dayPast=dateStr<=todayStr;
+    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;opacity:'+(dayPast?1:0.5)+'">';
+    h+='<div style="width:32px;font-size:11px;font-weight:700;color:#888">'+day+'</div>';
+    h+='<div style="flex:1">';
+    pd.blocks.forEach(function(block){
+      var col=block.type==="solo"?"var(--accent)":block.type==="technik"?"var(--orange)":block.type==="orch"?"var(--green)":"#ff6b9d";
+      var w=pct(S.blockMin,dayTotal);
+      h+='<div style="display:inline-block;width:'+w+'%;height:8px;background:'+col+';border-radius:2px;margin-right:2px" title="'+block.type+'"></div>';
+    });
+    h+='</div>';
+    h+='<div style="font-size:11px;color:#888;width:36px;text-align:right">'+fmtMin(dayTotal)+'</div>';
+    h+='</div>';
+  });
+  // Legend
+  h+='<div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">';
+  [{col:"var(--accent)",label:"Solo"},{col:"var(--orange)",label:"Technik"},{col:"var(--green)",label:"Orch/NF"},{col:"#ff6b9d",label:"Privat"}].forEach(function(l){
+    h+='<div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#888"><div style="width:10px;height:10px;border-radius:2px;background:'+l.col+'"></div>'+l.label+'</div>';
+  });
+  h+='</div></div>';
+
+  document.getElementById("mc").innerHTML=h;
+}
+
+render();
+</script>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js')
+    .then(function(r){ console.log('SW registered'); })
+    .catch(function(e){ console.log('SW failed:', e); });
+}
+</script>
+</body>
+</html>
