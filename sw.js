@@ -1,52 +1,34 @@
-const CACHE_NAME = "probeplaner-v1";
+const CACHE = "probeplaner-v3";
+const BASE = "/Probeplaner/";
 const ASSETS = [
-  "./",
-  "./index.html",
-  "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png"
+  BASE,
+  BASE + "index.html",
+  BASE + "manifest.json",
+  BASE + "icon-192.png",
+  BASE + "icon-512.png"
 ];
 
-// Install: cache all assets
-self.addEventListener("install", function(event) {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(ASSETS);
-    })
+self.addEventListener("install", function(e) {
+  e.waitUntil(
+    caches.open(CACHE).then(function(c) { return c.addAll(ASSETS); })
   );
   self.skipWaiting();
 });
 
-// Activate: delete old caches
-self.addEventListener("activate", function(event) {
-  event.waitUntil(
+self.addEventListener("activate", function(e) {
+  e.waitUntil(
     caches.keys().then(function(keys) {
-      return Promise.all(
-        keys.filter(function(key) { return key !== CACHE_NAME; })
-            .map(function(key) { return caches.delete(key); })
-      );
+      return Promise.all(keys.filter(function(k){ return k !== CACHE; }).map(function(k){ return caches.delete(k); }));
     })
   );
   self.clients.claim();
 });
 
-// Fetch: cache-first, fallback to network
-self.addEventListener("fetch", function(event) {
-  event.respondWith(
-    caches.match(event.request).then(function(cached) {
-      if (cached) return cached;
-      return fetch(event.request).then(function(response) {
-        // Cache new requests dynamically
-        if (response && response.status === 200 && response.type === "basic") {
-          var responseClone = response.clone();
-          caches.open(CACHE_NAME).then(function(cache) {
-            cache.put(event.request, responseClone);
-          });
-        }
-        return response;
-      }).catch(function() {
-        // Offline fallback
-        return caches.match("./index.html");
+self.addEventListener("fetch", function(e) {
+  e.respondWith(
+    caches.match(e.request).then(function(r) {
+      return r || fetch(e.request).catch(function() {
+        return caches.match(BASE + "index.html");
       });
     })
   );
