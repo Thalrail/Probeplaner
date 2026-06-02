@@ -1454,8 +1454,8 @@ function renderEinspielen(){
       h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--input-bg);border-radius:8px;padding:8px 12px">';
       h += '<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(item.name)+'</div>';
       h += '<div style="font-size:11px;color:#888;margin-top:2px">'+item.dauer+' Min</div></div>';
-      h += '<button onclick="editEinspielItem(\"'+item.id+'\")" style="background:none;border:none;color:#888;cursor:pointer;font-size:14px">&#9998;</button>';
-      h += '<button onclick="deleteEinspielItem(\"'+item.id+'\")" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">&times;</button>';
+      h += '<button onclick="editEinspielItem(\'' + item.id + '\')" style="background:none;border:none;color:#888;cursor:pointer;font-size:14px">&#9998;</button>';
+      h += '<button onclick="deleteEinspielItem(\'' + item.id + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">&times;</button>';
       h += '</div>';
     });
     h += '<button class="btn btn-primary btn-sm" onclick="openAddEinspielItem()">+ Übung hinzufügen</button>';
@@ -1672,7 +1672,7 @@ render();
 
 <script>
 // ── Auto-update via Service Worker ──────────────────────
-var CURRENT_VERSION = document.querySelector('meta[name="app-version"]').content;
+var CURRENT_VERSION = '1.0'; // bump this with each update
 var newSWWaiting = null;
 
 if ("serviceWorker" in navigator) {
