@@ -4,13 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <meta name="theme-color" content="#0d0d1a"/>
-<meta name="mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="Probeplaner"/>
-<link rel="apple-touch-icon" href="icon-192.png"/>
-<link rel="manifest" href="manifest.json"/>
-<title>Probeplaner</title>
+<title>Probeplan</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0d0d1a;color:#eef0f8;min-height:100vh;}
@@ -96,6 +90,8 @@ select.inp option{background:#16162a;}
 .block-solo{background:#6c63ff0f;border-left:3px solid var(--accent);}
 .block-orch{background:#2ed5730f;border-left:3px solid var(--green);}
 .block-priv{background:#ff6b9d0f;border-left:3px solid #ff6b9d;}
+.block-einspielen{background:#ff6b9d0f;border-left:3px solid #ff6b9d;}
+
 .block-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
 .block-type{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;}
 .block-time{font-size:11px;color:var(--text2);}
@@ -156,6 +152,11 @@ select.inp option{background:#16162a;}
 .empty-title{font-size:15px;font-weight:700;margin-bottom:6px;color:#888;}
 .empty-sub{font-size:12px;line-height:1.6;}
 
+
+/* Update banner */
+.update-banner{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:520px;background:#6c63ff;color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;z-index:999;font-size:13px;font-weight:600;box-shadow:0 -4px 20px rgba(108,99,255,0.4);display:none;}
+.update-banner.show{display:flex;}
+
 /* Done state */
 .block-done{opacity:0.45;}
 .block-done .block-type::after{content:" ✓";color:var(--green);}
@@ -176,7 +177,7 @@ select.inp option{background:#16162a;}
 <div id="app">
   <header>
     <div class="header-top">
-      <div class="app-title">Probeplaner<span>.</span></div>
+      <div class="app-title">Probe<span>.</span></div>
       <div class="header-actions">
         <button class="icon-btn" onclick="openHfu()" title="Hauptfachunterricht">🎓</button>
         <button class="icon-btn" onclick="openSettings()" title="Einstellungen">⚙️</button>
@@ -189,6 +190,7 @@ select.inp option{background:#16162a;}
       <button class="tab" data-tab="orch">🎼 Orch/NF</button>
       <button class="tab" data-tab="termine">📅 Termine</button>
       <button class="tab" data-tab="privat">🎤 Privat</button>
+      <button class="tab" data-tab="einspielen">🎙 Einspielen</button>
       <button class="tab" data-tab="stats">📊 Statistik</button>
     </div>
   </header>
@@ -323,6 +325,7 @@ var APP = {
   settings: {
     blockMin: 45,
     pauseMin: 15,
+    maxProbeMin: 180, // max practice minutes per day (0 = unlimited)
     startTime: "07:30",
     endTime: "19:00",
     soloRatio: 50,  // % solo, rest technik
@@ -347,6 +350,11 @@ var APP = {
     projekte: []    // { id, name, deadline, needsPractice, practiceWhat, practiceFrom, practiceDailyMin }
   },
   hfu: { day:"", start:"10:00", end:"12:00" },
+  einspielen: {
+    active: false,
+    dauer: 20,  // minutes
+    items: []   // [{ id, name, dauer }]
+  },
   // done blocks: { "2024-01-15": { blockIdx: true } }
   done: {},
   // generated plan: { "Mo": { blocks:[], adjustStart:null, adjustEnd:null, heimreise:false, heimreiseTime:"" } }
@@ -456,7 +464,10 @@ function computeDay(dayDE, dateStr){
   if(cur<endMin)free.push({s:cur,e:endMin});
 
   // Fit blocks
-  var blocks=[],count=0,MAX=Math.floor((endMin-startMin)/(S.blockMin+S.pauseMin))+1;
+  var blocks=[],count=0;
+  var maxByTime=Math.floor((endMin-startMin)/(S.blockMin+S.pauseMin))+1;
+  var maxByPref=S.maxProbeMin>0?Math.floor(S.maxProbeMin/S.blockMin):999;
+  var MAX=Math.min(maxByTime,maxByPref);
   for(var fi=0;fi<free.length;fi++){
     var slot=free[fi],pos=slot.s,first=true;
     while(count<MAX){
@@ -589,7 +600,100 @@ function computeDay(dayDE, dateStr){
     assignedBlocks.push({start:b.start,end:b.end,type:item.type||"orch",items:[{name:item.name||(item.name||""),dauer:item.dauer||S.blockMin}]});
   });
 
-  return{blocks:assignedBlocks,blocked:blocked};
+  // ── SHUFFLE blocks (max 2 consecutive same type) ──
+  var finalBlocks = shuffleBlocks(assignedBlocks);
+
+  // ── EINSPIELEN ──
+  var ei = APP.einspielen;
+  var resultBlocks = [];
+  if(ei.active && ei.dauer > 0){
+    // Find first orch event today to place einspielen before it
+    var orchSP = APP.termine.stundenplan.filter(function(sp){
+      return sp.weekday===dayDE && sp.spType==="orchester";
+    }).sort(function(a,b){return ptMin(a.start)-ptMin(b.start);});
+    var semStart=APP.termine.semester.start, semEnd=APP.termine.semester.end;
+    var hasOrchToday = orchSP.some(function(sp){
+      return !(semStart&&semEnd&&(dateStr<semStart||dateStr>semEnd));
+    });
+
+    var einspielStart, einspielEnd;
+    if(hasOrchToday && orchSP.length){
+      // Place before first orch event (accounting for travel+buffer)
+      var firstOrch = orchSP[0];
+      var travelTo = firstOrch.travelTo ? parseInt(firstOrch.travelTo) : 0;
+      var arrBuf = travelTo > 0 ? 10 : 0;
+      einspielEnd = ptMin(firstOrch.start) - travelTo - arrBuf - 10; // 10min between einspielen and departure
+      einspielStart = einspielEnd - ei.dauer;
+    } else {
+      // Place before first practice block
+      if(finalBlocks.length > 0){
+        einspielStart = finalBlocks[0].start - ei.dauer - 10;
+        einspielEnd = finalBlocks[0].start - 10;
+      }
+    }
+
+    if(einspielStart !== undefined && einspielStart >= startMin){
+      resultBlocks.push({
+        start: einspielStart,
+        end: einspielEnd,
+        type: "einspielen",
+        items: ei.items.length ? ei.items.map(function(it){return{name:it.name,dauer:it.dauer};}) : [{name:"Einspielen",dauer:ei.dauer}]
+      });
+    }
+  }
+
+  resultBlocks = resultBlocks.concat(finalBlocks);
+  return{blocks:resultBlocks,blocked:blocked};
+}
+
+// Shuffle blocks so same type never appears more than 2x in a row
+function shuffleBlocks(blocks){
+  if(blocks.length <= 1) return blocks;
+
+  // Separate urgent blocks (keep at front), shuffle the rest
+  var urgent = blocks.filter(function(b){return b.urgent;});
+  var normal = blocks.filter(function(b){return !b.urgent;});
+
+  // Fisher-Yates shuffle
+  for(var i=normal.length-1;i>0;i--){
+    var j=Math.floor(Math.random()*(i+1));
+    var tmp=normal[i]; normal[i]=normal[j]; normal[j]=tmp;
+  }
+
+  // Fix runs of 3+ same type by swapping
+  var maxTries = 50;
+  for(var t=0;t<maxTries;t++){
+    var fixed=true;
+    for(var i=2;i<normal.length;i++){
+      if(normal[i].type===normal[i-1].type&&normal[i].type===normal[i-2].type){
+        // Find a different block to swap with
+        for(var j=i+1;j<normal.length;j++){
+          if(normal[j].type!==normal[i].type){
+            var tmp=normal[i]; normal[i]=normal[j]; normal[j]=tmp;
+            fixed=false; break;
+          }
+        }
+        // If no swap found going forward, try backward
+        if(fixed){
+          for(var j=0;j<i-2;j++){
+            if(normal[j].type!==normal[i].type){
+              var tmp=normal[i]; normal[i]=normal[j]; normal[j]=tmp;
+              fixed=false; break;
+            }
+          }
+        }
+      }
+    }
+    if(fixed) break;
+  }
+
+  // Reassign time slots in order
+  var allBlocks = urgent.concat(normal);
+  // Sort original blocks by start time to get the time slots
+  var timeSlots = blocks.slice().sort(function(a,b){return a.start-b.start;});
+  return allBlocks.map(function(b,i){
+    return Object.assign({},b,{start:timeSlots[i].start,end:timeSlots[i].end,idx:i});
+  });
 }
 
 function generatePlan(fromDayDE){
@@ -644,6 +748,7 @@ function render(){
   else if(curTab==="orch")renderOrch();
   else if(curTab==="termine")renderTermine();
   else if(curTab==="privat")renderPrivat();
+  else if(curTab==="einspielen")renderEinspielen();
   else if(curTab==="stats")renderStats();
 }
 
@@ -706,9 +811,9 @@ function renderPlan(){
       planDay.blocks.forEach(function(block,bi){
         var bDateStr=planDay.date||dateStr;
         var done=isBlockDone(bDateStr,bi);
-        var cls="block block-"+block.type+(block.urgent?" block-urgent":"")+(done?" block-done":"");
-        var typeLabel=block.type==="technik"?"⚙️ Technik":block.type==="solo"?"🎵 Solo":block.type==="orch"?"🎼 Orch/NF":"🎤 Privat";
-        var typeCol=block.type==="technik"?"var(--orange)":block.type==="solo"?"var(--accent)":block.type==="orch"?"var(--green)":"#ff6b9d";
+        var cls="block block-"+(block.type==="einspielen"?"einspielen":block.type)+(block.urgent?" block-urgent":"")+(done?" block-done":"");
+        var typeLabel=block.type==="technik"?"⚙️ Technik":block.type==="solo"?"🎵 Solo":block.type==="orch"?"🎼 Orch/NF":block.type==="einspielen"?"🎙 Einspielen":"🎤 Privat";
+        var typeCol=block.type==="technik"?"var(--orange)":block.type==="solo"?"var(--accent)":block.type==="orch"?"var(--green)":block.type==="einspielen"?"#f39c12":"#ff6b9d";
         h+='<div class="'+cls+'">';
         h+='<div class="block-head">';
         h+='<span class="block-type" style="color:'+typeCol+'">'+typeLabel+(block.urgent?'<span class="urgent-badge">DRINGEND</span>':"")+'</span>';
@@ -1035,7 +1140,7 @@ function renderTermine(){
     APP.termine.stundenplan.forEach(function(sp){
       h+='<div class="list-item"><div class="list-item-body">'
         +'<div class="list-item-title">'+esc(sp.name)+'</div>'
-        +'<div class="list-item-meta"><span class="pill pill-accent">'+DAYS_FULL[DAYS_DE.indexOf(sp.weekday)]+'</span> <span class="pill pill-gray">'+sp.start+'–'+sp.end+'</span>'
+        +'<div class="list-item-meta"><span class="pill '+(sp.spType==="orchester"?"pill-green":"pill-accent")+'">'+(sp.spType==="orchester"?"🎼 Orch/Ensemble":"🏫 Hochschule")+'</span> <span class="pill pill-accent">'+DAYS_FULL[DAYS_DE.indexOf(sp.weekday)]+'</span> <span class="pill pill-gray">'+sp.start+'–'+sp.end+'</span>'
         +(sp.travelTo?'<span class="pill pill-gray">Hinfahrt: '+sp.travelTo+' Min</span>':'')
         +(sp.travelBack?'<span class="pill pill-gray">Rückfahrt: '+sp.travelBack+' Min</span>':'')
         +'</div></div>'
@@ -1072,7 +1177,11 @@ function saveSemester(){APP.termine.semester={start:document.getElementById("sem
 
 function openAddStundenplan(id){
   var ex=id?APP.termine.stundenplan.find(function(s){return s.id===id;}):null;
-  var h='<div class="field"><div class="field-label">Bezeichnung *</div><input class="inp" id="sp_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Gehörbildung, Musiktheorie"/></div>'
+  var h='<div class="field"><div class="field-label">Typ</div><div class="chip-group">'
+    +'<button class="chip '+( (!ex||ex.spType==="hochschule")?"active":"")+'" onclick="selectChip(this,\'sp_type\',\'hochschule\')" data-val="hochschule">🏫 Hochschule</button>'
+    +'<button class="chip '+(ex&&ex.spType==="orchester"?"active":"")+'" onclick="selectChip(this,\'sp_type\',\'orchester\')" data-val="orchester">🎼 Orchester/Ensemble</button>'
+    +'</div><input type="hidden" id="sp_type" value="'+(ex?ex.spType||"hochschule":"hochschule")+'"/></div>'
+    +'<div class="field"><div class="field-label">Bezeichnung *</div><input class="inp" id="sp_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Gehörbildung, Sinfonieorchester"/></div>'
     +'<div class="field"><div class="field-label">Wochentag</div><select class="inp" id="sp_day">';
   DAYS_DE.slice(0,5).forEach(function(d,i){h+='<option value="'+d+'"'+(ex&&ex.weekday===d?" selected":"")+'>'+DAYS_FULL[i]+'</option>';});
   h+='</select></div>'
@@ -1086,7 +1195,7 @@ function openAddStundenplan(id){
 function editSP(id){openAddStundenplan(id);}
 function saveSP(id){
   var name=document.getElementById("sp_name").value.trim();if(!name){popup("Name fehlt","var(--red)");return;}
-  var item={id:id||uid(),name:name,weekday:document.getElementById("sp_day").value,start:document.getElementById("sp_start").value,end:document.getElementById("sp_end").value,travelTo:parseInt(document.getElementById("sp_travTo").value)||0,travelBack:parseInt(document.getElementById("sp_travBack").value)||0};
+  var item={id:id||uid(),name:name,spType:document.getElementById("sp_type").value||"hochschule",weekday:document.getElementById("sp_day").value,start:document.getElementById("sp_start").value,end:document.getElementById("sp_end").value,travelTo:parseInt(document.getElementById("sp_travTo").value)||0,travelBack:parseInt(document.getElementById("sp_travBack").value)||0};
   if(id)APP.termine.stundenplan=APP.termine.stundenplan.map(function(s){return s.id===id?item:s;});else APP.termine.stundenplan.push(item);
   saveApp();closeAdd();autoGenerate(todayDayDE());popup("Gespeichert ✓");renderTermine();
 }
@@ -1207,6 +1316,7 @@ function openSettings(){
   document.getElementById("s_soloRatio").value=S.soloRatio;
   document.getElementById("s_soloLbl").textContent=S.soloRatio;
   document.getElementById("s_techLbl").textContent=100-S.soloRatio;
+  document.getElementById("s_maxProbeMin").value=S.maxProbeMin||0;
   document.getElementById("s_etuedeOn").checked=S.etuedeOn;
   document.getElementById("s_etuedeFields").style.display=S.etuedeOn?"":"none";
   document.getElementById("s_etuedeDays").value=S.etuedeDays;
@@ -1223,6 +1333,7 @@ function saveSettings(){
   APP.settings.startTime=document.getElementById("s_startTime").value;
   APP.settings.endTime=document.getElementById("s_endTime").value;
   APP.settings.soloRatio=parseInt(document.getElementById("s_soloRatio").value)||50;
+  APP.settings.maxProbeMin=parseInt(document.getElementById("s_maxProbeMin").value)||0;
   APP.settings.etuedeOn=document.getElementById("s_etuedeOn").checked;
   APP.settings.etuedeDays=parseInt(document.getElementById("s_etuedeDays").value)||5;
   APP.settings.etuedeMin=parseInt(document.getElementById("s_etuedeMin").value)||30;
@@ -1311,6 +1422,92 @@ function checkWeeklyReset(){
 checkWeeklyReset();
 checkSemesterPopup();
 generatePlan();
+
+// ══════════════════════════════════════════════════════
+// EINSPIELEN TAB
+// ══════════════════════════════════════════════════════
+function renderEinspielen(){
+  var ei = APP.einspielen;
+  var h = '<div style="font-size:18px;font-weight:700;margin-bottom:4px">Einspielroutine 🎙</div>';
+  h += '<div style="font-size:12px;color:#888;margin-bottom:18px">Wird automatisch vor den 1. Block oder vor Orchesterproben gesetzt. 10 Min Puffer danach.</div>';
+
+  // Active toggle
+  h += '<div class="card" style="margin-bottom:12px">';
+  h += '<div class="toggle-row"><label for="ei_active" style="font-size:14px;font-weight:700">Einspielroutine aktivieren</label>';
+  h += '<label class="toggle"><input type="checkbox" id="ei_active"'+(ei.active?" checked":"")+' onchange="toggleEinspielen(this.checked)"/><span class="slider"></span></label></div>';
+  h += '</div>';
+
+  if(ei.active){
+    // Total duration
+    var totalDauer = ei.items.reduce(function(s,it){return s+(it.dauer||0);},0) || ei.dauer;
+    h += '<div class="card" style="margin-bottom:12px">';
+    h += '<div class="card-title">Gesamtdauer: <span style="color:var(--accent)">'+totalDauer+' Min</span></div>';
+    h += '<div style="font-size:12px;color:#888">Passe die Dauer der einzelnen Übungen an oder trage sie direkt ein.</div>';
+    h += '</div>';
+
+    // Items list
+    h += '<div class="card" style="margin-bottom:12px"><div class="card-title">Übungen</div>';
+    if(!ei.items.length){
+      h += '<div style="font-size:12px;color:#555;font-style:italic;margin-bottom:10px">Noch keine Übungen — tippe unten auf + um welche hinzuzufügen.</div>';
+    }
+    ei.items.forEach(function(item,i){
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--input-bg);border-radius:8px;padding:8px 12px">';
+      h += '<div style="flex:1"><div style="font-size:13px;font-weight:600">'+esc(item.name)+'</div>';
+      h += '<div style="font-size:11px;color:#888;margin-top:2px">'+item.dauer+' Min</div></div>';
+      h += '<button onclick="editEinspielItem(\"'+item.id+'\")" style="background:none;border:none;color:#888;cursor:pointer;font-size:14px">&#9998;</button>';
+      h += '<button onclick="deleteEinspielItem(\"'+item.id+'\")" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">&times;</button>';
+      h += '</div>';
+    });
+    h += '<button class="btn btn-primary btn-sm" onclick="openAddEinspielItem()">+ Übung hinzufügen</button>';
+    h += '</div>';
+
+    // Fallback total dauer if no items
+    if(!ei.items.length){
+      h += '<div class="card"><div class="card-title">Gesamtdauer (wenn keine Einzelübungen)</div>';
+      h += '<div class="field" style="margin-bottom:0"><input class="inp" type="number" min="5" max="60" step="5" value="'+(ei.dauer||20)+'" onchange="APP.einspielen.dauer=parseInt(this.value)||20;saveApp();autoGenerate(todayDayDE())"/></div></div>';
+    }
+  }
+
+  document.getElementById("mc").innerHTML = h;
+}
+
+function toggleEinspielen(val){
+  APP.einspielen.active = val;
+  saveApp(); autoGenerate(todayDayDE()); renderEinspielen();
+}
+
+function openAddEinspielItem(id){
+  var ex = id ? APP.einspielen.items.find(function(i){return i.id===id;}) : null;
+  var h = '<div class="field"><div class="field-label">Übungsname *</div>'
+    +'<input class="inp" id="ei_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Lippenvibration, Lange Töne, Tonleiter..."/></div>'
+    +'<div class="field"><div class="field-label">Dauer (Minuten)</div>'
+    +'<input class="inp" id="ei_dauer" type="number" min="1" max="30" step="1" value="'+(ex?ex.dauer:5)+'"/></div>'
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>'
+    +(ex?'<button class="btn btn-danger btn-sm" onclick="deleteEinspielItem(\"'+ex.id+'\")">Löschen</button>':'')
+    +'<button class="btn btn-primary" onclick="saveEinspielItem('+(ex?'\"'+ex.id+'\"':'null')+')">Speichern</button></div>';
+  openAddSheet(ex?"Übung bearbeiten":"Einspielübung",h);
+}
+function editEinspielItem(id){ openAddEinspielItem(id); }
+function saveEinspielItem(id){
+  var name = document.getElementById("ei_name").value.trim();
+  if(!name){popup("Name fehlt","var(--red)");return;}
+  var dauer = parseInt(document.getElementById("ei_dauer").value)||5;
+  var item = {id:id||uid(), name:name, dauer:dauer};
+  if(id) APP.einspielen.items = APP.einspielen.items.map(function(i){return i.id===id?item:i;});
+  else APP.einspielen.items.push(item);
+  // Update total dauer
+  APP.einspielen.dauer = APP.einspielen.items.reduce(function(s,i){return s+i.dauer;},0);
+  saveApp(); closeAdd(); autoGenerate(todayDayDE()); popup("Gespeichert ✓"); renderEinspielen();
+}
+function deleteEinspielItem(id){
+  confirm_("Löschen?","Übung entfernen?",function(){
+    APP.einspielen.items = APP.einspielen.items.filter(function(i){return i.id!==id;});
+    APP.einspielen.dauer = APP.einspielen.items.reduce(function(s,i){return s+i.dauer;},0)||20;
+    saveApp(); closeAdd(); autoGenerate(todayDayDE()); popup("Gelöscht"); renderEinspielen();
+  });
+}
+
+
 // ══════════════════════════════════════════════════════
 // STATISTIK TAB
 // ══════════════════════════════════════════════════════
@@ -1465,12 +1662,67 @@ function renderStats(){
 
 render();
 </script>
+
+<!-- UPDATE BANNER -->
+<div class="update-banner" id="updateBanner">
+  <span>🆕 Update verfügbar!</span>
+  <button onclick="applyUpdate()" style="background:#fff;color:#6c63ff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:800;cursor:pointer;">Jetzt aktualisieren</button>
+  <button onclick="dismissUpdate()" style="background:none;border:none;color:#ffffffaa;cursor:pointer;font-size:18px;padding:0 4px;">×</button>
+</div>
+
 <script>
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('sw.js')
-    .then(function(r){ console.log('SW registered'); })
-    .catch(function(e){ console.log('SW failed:', e); });
+// ── Auto-update via Service Worker ──────────────────────
+var CURRENT_VERSION = document.querySelector('meta[name="app-version"]').content;
+var newSWWaiting = null;
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").then(function(reg) {
+    // Check for waiting SW (new version downloaded)
+    if (reg.waiting) {
+      showUpdateBanner();
+      newSWWaiting = reg.waiting;
+    }
+    reg.addEventListener("updatefound", function() {
+      var newSW = reg.installing;
+      newSW.addEventListener("statechange", function() {
+        if (newSW.state === "installed" && navigator.serviceWorker.controller) {
+          showUpdateBanner();
+          newSWWaiting = newSW;
+        }
+      });
+    });
+  });
+
+  // Listen for version messages from SW
+  navigator.serviceWorker.addEventListener("message", function(e) {
+    if (e.data && e.data.type === "VERSION_CHECK") {
+      if (e.data.version !== CURRENT_VERSION) {
+        showUpdateBanner();
+      }
+    }
+  });
+
+  // When SW takes over, reload the page
+  var refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", function() {
+    if (!refreshing) { refreshing = true; window.location.reload(); }
+  });
+}
+
+function showUpdateBanner() {
+  document.getElementById("updateBanner").classList.add("show");
+}
+function dismissUpdate() {
+  document.getElementById("updateBanner").classList.remove("show");
+}
+function applyUpdate() {
+  if (newSWWaiting) {
+    newSWWaiting.postMessage({ type: "SKIP_WAITING" });
+  } else {
+    window.location.reload(true);
+  }
 }
 </script>
+
 </body>
 </html>
