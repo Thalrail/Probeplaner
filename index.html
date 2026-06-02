@@ -1478,14 +1478,22 @@ function toggleEinspielen(val){
 
 function openAddEinspielItem(id){
   var ex = id ? APP.einspielen.items.find(function(i){return i.id===id;}) : null;
-  var h = '<div class="field"><div class="field-label">Übungsname *</div>'
-    +'<input class="inp" id="ei_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Lippenvibration, Lange Töne, Tonleiter..."/></div>'
+  var h = '<div class="field"><div class="field-label">Uebungsname *</div>'
+    +'<input class="inp" id="ei_name" value="'+(ex?esc(ex.name):"")+'" placeholder="z.B. Lippenvibration, Lange Tone..."/></div>'
     +'<div class="field"><div class="field-label">Dauer (Minuten)</div>'
     +'<input class="inp" id="ei_dauer" type="number" min="1" max="30" step="1" value="'+(ex?ex.dauer:5)+'"/></div>'
-    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>'
-    +(ex?'<button class="btn btn-danger btn-sm" onclick="deleteEinspielItem(\"'+ex.id+'\")">Löschen</button>':'')
-    +'<button class="btn btn-primary" onclick="saveEinspielItem('+(ex?'\"'+ex.id+'\"':'null')+')">Speichern</button></div>';
-  openAddSheet(ex?"Übung bearbeiten":"Einspielübung",h);
+    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>';
+  if(ex){
+    h += '<button class="btn btn-danger btn-sm" id="ei_del_btn">Loeschen</button>';
+  }
+  h += '<button class="btn btn-primary" id="ei_save_btn">Speichern</button></div>';
+  openAddSheet(ex?"Ubung bearbeiten":"Einspielubung", h);
+  // Attach handlers after DOM is ready
+  var saveId = ex ? ex.id : null;
+  document.getElementById("ei_save_btn").onclick = function(){ saveEinspielItem(saveId); };
+  if(ex){
+    document.getElementById("ei_del_btn").onclick = function(){ deleteEinspielItem(ex.id); };
+  }
 }
 function editEinspielItem(id){ openAddEinspielItem(id); }
 function saveEinspielItem(id){
