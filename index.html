@@ -492,10 +492,14 @@ function computeDay(dayDE, dateStr){
   }
   blocked.sort(function(a,b){return a.s-b.s;});
 
-  // Free slots
+  // Free slots — add 10min gap after each blocked period before next block can start
+  var POST_BUFFER = 10;
   var free=[],cur=startMin;
-  blocked.forEach(function(b){if(cur<b.s)free.push({s:cur,e:Math.min(b.s,endMin)});cur=Math.max(cur,b.e);});
-  if(cur<endMin)free.push({s:cur,e:endMin});
+  blocked.forEach(function(b){
+    if(cur<b.s) free.push({s:cur, e:Math.min(b.s, endMin)});
+    cur = Math.max(cur, b.e + POST_BUFFER);
+  });
+  if(cur<endMin) free.push({s:cur, e:endMin});
 
   // Fit blocks
   var blocks=[],count=0;
