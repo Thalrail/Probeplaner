@@ -785,38 +785,8 @@ function dayDoneCount(dateStr, totalBlocks){
   return Object.values(APP.done[dateStr]).filter(Boolean).length;
 }
 
-// Compute a hash of all plan inputs to detect changes
-function computePlanHash(){
-  var data = {
-    settings: APP.settings,
-    solo: APP.solo.map(function(s){return {id:s.id,status:s.status,weight:s.weight,bereiche:s.bereiche};}),
-    technik: APP.technik.map(function(t){return {id:t.id,prio:t.prio,dauer:t.dauer,freqPerWeek:t.freqPerWeek};}),
-    orch: APP.orch.filter(function(o){return o.active;}).map(function(o){return {id:o.id,from:o.from,until:o.until,dauer:o.dauer};}),
-    hfu: APP.hfu,
-    einspielen: {active:APP.einspielen.active,dauer:APP.einspielen.dauer},
-    weekEvents: APP.termine.stundenplan.map(function(s){return {id:s.id,weekday:s.weekday,start:s.start,end:s.end};}),
-    dayAdjust: APP.dayAdjust,
-    privat: {
-      auftritte: APP.privat.auftritte.map(function(a){return {id:a.id,date:a.date,needsPractice:a.needsPractice,practiceFrom:a.practiceFrom};}),
-      projekte: APP.privat.projekte.map(function(p){return {id:p.id,deadline:p.deadline,needsPractice:p.needsPractice,practiceFrom:p.practiceFrom};}),
-    }
-  };
-  // Simple hash: JSON string length + checksum of chars
-  var str = JSON.stringify(data);
-  var hash = str.length;
-  for(var i=0;i<str.length;i+=7) hash = ((hash * 31) + str.charCodeAt(i)) & 0x7fffffff;
-  return hash.toString();
-}
-
 // Auto-generate on load / after changes
 function autoGenerate(fromDay){
-  var newHash = computePlanHash(); // fromDay excluded — same content = same hash
-  if(newHash === APP.planHash && APP.plan && APP.plan["Mo"] && APP.plan["Mo"].date){
-    // Nothing changed — just re-render if needed
-    if(curTab==="plan") render();
-    return;
-  }
-  APP.planHash = newHash;
   generatePlan(fromDay);
   saveApp();
   if(curTab==="plan") render();
@@ -1529,7 +1499,10 @@ function checkWeeklyReset(){
 // ══════════════════════════════════════════════════════
 checkWeeklyReset();
 checkSemesterPopup();
-autoGenerate(); // only generates if inputs changed
+// Only auto-generate on startup if no plan exists yet for this week
+if(!APP.plan || !APP.plan["Mo"] || APP.plan["Mo"].date !== getWeekDates()[0]){
+  generatePlan();
+}
 
 // ══════════════════════════════════════════════════════
 // EINSPIELEN TAB
