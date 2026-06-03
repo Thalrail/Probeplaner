@@ -788,6 +788,7 @@ function dayDoneCount(dateStr, totalBlocks){
 // Auto-generate on load / after changes
 function autoGenerate(fromDay){
   generatePlan(fromDay);
+  localStorage.setItem("planWeek", getMonday());
   saveApp();
   if(curTab==="plan") render();
 }
@@ -856,7 +857,33 @@ function renderPlan(){
       if(planDay.note==="keine_zeit")h+='<div class="plan-empty">Keine freie Übezeit</div>';
       else h+='<div class="plan-empty">Kein Plan generiert</div>';
     } else {
-      var doneCount=dayDoneCount(planDay.date||dateStr, planDay.blocks.length);
+      // Show blocked times (termine, mittagspause etc) — not checkable
+      if(planDay.blocked && planDay.blocked.length){
+        planDay.blocked.forEach(function(bl){
+          if(!bl.label) return;
+          var isM=bl.label==="Mittagspause", isH=bl.label==="HFU";
+          var col=isM?"#ffa502":isH?"#9b59b6":"#4a90e2";
+          var icon=isM?"🍽":isH?"🎓":"📅";
+          h+='<div style="background:'+col+'15;border-left:2px solid '+col+';border-radius:6px;padding:4px 8px;margin-bottom:5px;display:flex;gap:8px;align-items:center">'
+           +'<span style="color:'+col+';font-weight:700;font-size:11px">'+icon+' '+esc(bl.label)+'</span>'
+           +'<span style="font-size:11px;color:#888">'+minToTime(bl.s)+'–'+minToTime(bl.e)+'</span>'
+           +'</div>';
+        });
+      }
+      // Show blocked times
+      if(planDay.blocked && planDay.blocked.length){
+        planDay.blocked.forEach(function(bl){
+          if(!bl.label) return;
+          var isM=bl.label==="Mittagspause", isH=bl.label==="HFU";
+          var col=isM?"#ffa502":isH?"#9b59b6":"#4a90e2";
+          var icon=isM?"Mittag":isH?"HFU":"Termin";
+          h+='<div style="background:'+col+'15;border-left:2px solid '+col+';border-radius:6px;padding:4px 8px;margin-bottom:5px;display:flex;gap:8px;align-items:center">'
+           +'<span style="color:'+col+';font-weight:700;font-size:11px">'+icon+': '+esc(bl.label)+'</span>'
+           +'<span style="font-size:11px;color:#888">'+minToTime(bl.s)+'-'+minToTime(bl.e)+'</span>'
+           +'</div>';
+        });
+      }
+      doneCount=dayDoneCount(planDay.date||dateStr, planDay.blocks.length);
       var donePct=planDay.blocks.length>0?Math.round(doneCount/planDay.blocks.length*100):0;
       if(planDay.blocks.length>0){
         h+='<div class="day-done-bar"><div class="day-done-fill" style="width:'+donePct+'%"></div></div>';
@@ -1487,10 +1514,11 @@ function checkWeeklyReset(){
   if(storedWeek!==currentWeek){
     // New week — reset day adjustments and regenerate
     APP.dayAdjust={};
-    APP.planHash=""; // force regeneration for new week
     saveApp();
     generatePlan();
     localStorage.setItem("lastWeek",currentWeek);
+    localStorage.setItem("planWeek",currentWeek);
+    localStorage.setItem("planWeek",currentWeek);
   }
 }
 
@@ -1499,9 +1527,12 @@ function checkWeeklyReset(){
 // ══════════════════════════════════════════════════════
 checkWeeklyReset();
 checkSemesterPopup();
-// Only auto-generate on startup if no plan exists yet for this week
-if(!APP.plan || !APP.plan["Mo"] || APP.plan["Mo"].date !== getWeekDates()[0]){
+// Only generate on startup if no plan exists for this week
+var _thisWeek = getMonday();
+var _storedWeek = localStorage.getItem("planWeek");
+if(!_storedWeek || _storedWeek !== _thisWeek || !APP.plan || !APP.plan["Mo"]){
   generatePlan();
+  localStorage.setItem("planWeek", _thisWeek);
 }
 
 // ══════════════════════════════════════════════════════
