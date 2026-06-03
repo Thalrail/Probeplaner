@@ -225,6 +225,21 @@ select.inp option{background:#16162a;}
   </div>
 
   <div class="settings-section">
+    <div class="settings-title">Mittagspause</div>
+    <div class="toggle-row">
+      <label for="s_mittagOn">Tägliche Mittagspause einplanen</label>
+      <label class="toggle"><input type="checkbox" id="s_mittagOn" onchange="toggleMittagFields(this.checked)"/><span class="slider"></span></label>
+    </div>
+    <div id="s_mittagFields" style="display:none">
+      <div class="row" style="margin-top:8px">
+        <div class="field"><div class="field-label">Von</div><input class="inp" id="s_mittagStart" type="time" value="12:30"/></div>
+        <div class="field"><div class="field-label">Bis</div><input class="inp" id="s_mittagEnd" type="time" value="13:30"/></div>
+      </div>
+      <div style="font-size:11px;color:#888;margin-top:4px">In diesem Zeitfenster werden keine Übeblöcke geplant.</div>
+    </div>
+  </div>
+
+  <div class="settings-section">
     <div class="settings-title">Gewichtung Standard (Solo/Technik %)</div>
     <div class="row" style="align-items:center;gap:10px">
       <span style="font-size:12px;color:var(--accent);font-weight:700;width:70px">Solo <span id="s_soloLbl">50</span>%</span>
@@ -335,6 +350,9 @@ var APP = {
     blockMin: 45,
     pauseMin: 15,
     maxProbeMin: 180, // max practice minutes per day (0 = unlimited)
+    mittagspause: false,
+    mittagStart: "12:30",
+    mittagEnd: "13:30",
     startTime: "07:30",
     endTime: "19:00",
     soloRatio: 50,  // % solo, rest technik
@@ -464,6 +482,13 @@ function computeDay(dayDE, dateStr){
   // HFU
   if(APP.hfu.day===dayDE&&APP.hfu.start){
     blocked.push({s:ptMin(APP.hfu.start),e:ptMin(APP.hfu.end),label:"HFU"});
+  }
+  // Mittagspause
+  if(S.mittagspause && S.mittagStart && S.mittagEnd){
+    var mAdj = APP.dayAdjust[dayDE]||{};
+    var mittagS = ptMin(mAdj.mittagStart||S.mittagStart);
+    var mittagE = ptMin(mAdj.mittagEnd||S.mittagEnd);
+    blocked.push({s:mittagS, e:mittagE, label:"Mittagspause"});
   }
   blocked.sort(function(a,b){return a.s-b.s;});
 
@@ -615,43 +640,62 @@ function computeDay(dayDE, dateStr){
   // ── EINSPIELEN ──
   var ei = APP.einspielen;
   var resultBlocks = [];
-  if(ei.active && ei.dauer > 0){
-    // Find first orch event today to place einspielen before it
-    var orchSP = APP.termine.stundenplan.filter(function(sp){
-      return sp.weekday===dayDE && sp.spType==="orchester";
-    }).sort(function(a,b){return ptMin(a.start)-ptMin(b.start);});
+
+  if(ei.active && ei.dauer > 0 && finalBlocks.length > 0){
+    var einspielBlock = {
+      type: "einspielen",
+      items: ei.items.length
+        ? ei.items.map(function(it){return{name:it.name,dauer:it.dauer};})
+        : [{name:"Einspielen",dauer:ei.dauer}]
+    };
+
+    // Find first orch event today
     var semStart=APP.termine.semester.start, semEnd=APP.termine.semester.end;
-    var hasOrchToday = orchSP.some(function(sp){
-      return !(semStart&&semEnd&&(dateStr<semStart||dateStr>semEnd));
+    var orchSP = APP.termine.stundenplan.filter(function(sp){
+      return sp.weekday===dayDE && sp.spType==="orchester"
+        && !(semStart&&semEnd&&(dateStr<semStart||dateStr>semEnd));
+    }).sort(function(a,b){return ptMin(a.start)-ptMin(b.start);});
+
+    var insertBefore = 0; // default: before first block
+
+    if(orchSP.length > 0){
+      // Find which block comes just before the first orch event
+      var orchStart = ptMin(orchSP[0].start);
+      var travelTo = orchSP[0].travelTo ? parseInt(orchSP[0].travelTo) : 0;
+      var latestEnd = orchStart - travelTo - (travelTo>0?10:0) - 10;
+      // Find last block that ends before latestEnd
+      var bestIdx = 0;
+      for(var bi=0; bi<finalBlocks.length; bi++){
+        if(finalBlocks[bi].end <= latestEnd) bestIdx = bi+1;
+      }
+      insertBefore = bestIdx;
+    }
+
+    // Insert einspielen at the right position, stealing the time slot
+    // Shift all blocks after insertBefore by ei.dauer+10 minutes
+    var shifted = finalBlocks.map(function(b, i){
+      if(i < insertBefore) return b;
+      return Object.assign({},b,{start:b.start+ei.dauer+10, end:b.end+ei.dauer+10});
     });
 
-    var einspielStart, einspielEnd;
-    if(hasOrchToday && orchSP.length){
-      // Place before first orch event (accounting for travel+buffer)
-      var firstOrch = orchSP[0];
-      var travelTo = firstOrch.travelTo ? parseInt(firstOrch.travelTo) : 0;
-      var arrBuf = travelTo > 0 ? 10 : 0;
-      einspielEnd = ptMin(firstOrch.start) - travelTo - arrBuf - 10; // 10min between einspielen and departure
-      einspielStart = einspielEnd - ei.dauer;
-    } else {
-      // Place before first practice block
-      if(finalBlocks.length > 0){
-        einspielStart = finalBlocks[0].start - ei.dauer - 10;
-        einspielEnd = finalBlocks[0].start - 10;
-      }
+    // Place einspielen 10min before the first shifted block after insertBefore
+    var refBlock = shifted[insertBefore];
+    einspielBlock.start = refBlock.start - ei.dauer - 10;
+    einspielBlock.end   = refBlock.start - 10;
+
+    // If einspielen starts before day start, just place it at dayStart
+    if(einspielBlock.start < startMin){
+      einspielBlock.start = startMin;
+      einspielBlock.end   = startMin + ei.dauer;
     }
 
-    if(einspielStart !== undefined && einspielStart >= startMin){
-      resultBlocks.push({
-        start: einspielStart,
-        end: einspielEnd,
-        type: "einspielen",
-        items: ei.items.length ? ei.items.map(function(it){return{name:it.name,dauer:it.dauer};}) : [{name:"Einspielen",dauer:ei.dauer}]
-      });
-    }
+    resultBlocks = shifted.slice(0, insertBefore)
+      .concat([einspielBlock])
+      .concat(shifted.slice(insertBefore));
+  } else {
+    resultBlocks = finalBlocks;
   }
 
-  resultBlocks = resultBlocks.concat(finalBlocks);
   return{blocks:resultBlocks,blocked:blocked};
 }
 
@@ -766,7 +810,7 @@ function computePlanHash(){
 
 // Auto-generate on load / after changes
 function autoGenerate(fromDay){
-  var newHash = computePlanHash() + "|" + (fromDay||"all");
+  var newHash = computePlanHash(); // fromDay excluded — same content = same hash
   if(newHash === APP.planHash && APP.plan && APP.plan["Mo"] && APP.plan["Mo"].date){
     // Nothing changed — just re-render if needed
     if(curTab==="plan") render();
@@ -904,8 +948,11 @@ function setDayTime(day,field,val){
 
 function openDayAdjust(day){
   var adj=APP.dayAdjust[day]||{};
+  var showMittag=APP.settings.mittagspause;
   var h='<div class="field"><div class="field-label">Später anfangen (nur heute)</div><input type="time" class="inp" id="da_start" value="'+(adj.start||APP.settings.startTime)+'"/></div>'
     +'<div class="field"><div class="field-label">Früher aufhören (nur heute)</div><input type="time" class="inp" id="da_end" value="'+(adj.end||APP.settings.endTime)+'"/></div>'
+    +(showMittag?'<div class="field"><div class="field-label">Mittagspause von (nur heute)</div><input type="time" class="inp" id="da_mStart" value="'+(adj.mittagStart||APP.settings.mittagStart||"12:30")+'"/></div>'
+    +'<div class="field"><div class="field-label">Mittagspause bis (nur heute)</div><input type="time" class="inp" id="da_mEnd" value="'+(adj.mittagEnd||APP.settings.mittagEnd||"13:30")+'"/></div>':"")
     +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button><button class="btn btn-primary" onclick="saveDayAdjust(\''+day+'\')">Übernehmen</button></div>';
   openAddSheet(DAYS_FULL[DAYS_DE.indexOf(day)]+" anpassen",h);
 }
@@ -920,6 +967,11 @@ function saveDayAdjust(day){
     confirm_("Sicher?","Du startest später als geplant ("+start+" statt "+defaultStart+"). Bist du sicher dass du dir die Zeit nehmen kannst?",function(){
       if(!APP.dayAdjust[day])APP.dayAdjust[day]={};
       APP.dayAdjust[day].start=start;APP.dayAdjust[day].end=end;
+      if(APP.settings.mittagspause){
+        var mS2=document.getElementById("da_mStart");var mE2=document.getElementById("da_mEnd");
+        if(mS2)APP.dayAdjust[day].mittagStart=mS2.value;
+        if(mE2)APP.dayAdjust[day].mittagEnd=mE2.value;
+      }
       saveApp();autoGenerate(day);
       popup("Tag angepasst ✓");
     },"Ja, sicher");
@@ -927,6 +979,11 @@ function saveDayAdjust(day){
   }
   if(!APP.dayAdjust[day])APP.dayAdjust[day]={};
   APP.dayAdjust[day].start=start;APP.dayAdjust[day].end=end;
+  if(APP.settings.mittagspause){
+    var mS=document.getElementById("da_mStart");var mE=document.getElementById("da_mEnd");
+    if(mS)APP.dayAdjust[day].mittagStart=mS.value;
+    if(mE)APP.dayAdjust[day].mittagEnd=mE.value;
+  }
   saveApp();closeAdd();autoGenerate(day);popup("Tag angepasst ✓");
 }
 
@@ -1357,6 +1414,10 @@ function openSettings(){
   document.getElementById("s_soloLbl").textContent=S.soloRatio;
   document.getElementById("s_techLbl").textContent=100-S.soloRatio;
   document.getElementById("s_maxProbeMin").value=S.maxProbeMin||0;
+  document.getElementById("s_mittagOn").checked=S.mittagspause||false;
+  document.getElementById("s_mittagFields").style.display=S.mittagspause?"block":"none";
+  document.getElementById("s_mittagStart").value=S.mittagStart||"12:30";
+  document.getElementById("s_mittagEnd").value=S.mittagEnd||"13:30";
   document.getElementById("s_etuedeOn").checked=S.etuedeOn;
   document.getElementById("s_etuedeFields").style.display=S.etuedeOn?"":"none";
   document.getElementById("s_etuedeDays").value=S.etuedeDays;
@@ -1366,6 +1427,9 @@ function openSettings(){
   document.querySelectorAll("#s_instruments .chip").forEach(function(c){c.classList.toggle("active",S.instruments.indexOf(c.dataset.instr)>=0);});
   document.getElementById("settingsOverlay").classList.add("open");
 }
+function toggleMittagFields(val){
+  document.getElementById("s_mittagFields").style.display = val ? "block" : "none";
+}
 function toggleSettingsEtuede(){document.getElementById("s_etuedeFields").style.display=document.getElementById("s_etuedeOn").checked?"":"none";}
 function saveSettings(){
   APP.settings.blockMin=parseInt(document.getElementById("s_blockMin").value)||45;
@@ -1374,6 +1438,9 @@ function saveSettings(){
   APP.settings.endTime=document.getElementById("s_endTime").value;
   APP.settings.soloRatio=parseInt(document.getElementById("s_soloRatio").value)||50;
   APP.settings.maxProbeMin=parseInt(document.getElementById("s_maxProbeMin").value)||0;
+  APP.settings.mittagspause=document.getElementById("s_mittagOn").checked;
+  APP.settings.mittagStart=document.getElementById("s_mittagStart").value;
+  APP.settings.mittagEnd=document.getElementById("s_mittagEnd").value;
   APP.settings.etuedeOn=document.getElementById("s_etuedeOn").checked;
   APP.settings.etuedeDays=parseInt(document.getElementById("s_etuedeDays").value)||5;
   APP.settings.etuedeMin=parseInt(document.getElementById("s_etuedeMin").value)||30;
