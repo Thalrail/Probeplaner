@@ -64,14 +64,14 @@ select.inp option{background:#16162a;}
 .pill-gray{background:#88888822;color:#888;}
 
 /* Toggle checkbox */
-.toggle-row{display:flex;align-items:center;gap:10px;padding:8px 0;}
+.toggle-row{display:flex;align-items:center;gap:10px;padding:8px 0;justify-content:space-between;} .toggle-row label{font-size:13px;cursor:pointer;flex:1;}
 .toggle-row label{font-size:13px;cursor:pointer;flex:1;}
-.toggle{position:relative;width:38px;height:22px;flex-shrink:0;}
+.toggle{position:relative;width:44px;min-width:44px;height:26px;flex-shrink:0;display:inline-block;}
 .toggle input{opacity:0;width:0;height:0;position:absolute;}
-.slider{position:absolute;inset:0;background:#2a2a40;border-radius:11px;transition:0.2s;}
-.slider:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#888;border-radius:50%;transition:0.2s;}
+.slider{position:absolute;inset:0;background:#2a2a40;border-radius:13px;transition:0.2s;width:44px;height:26px;}
+.slider:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:#888;border-radius:50%;transition:0.2s;}
 .toggle input:checked+.slider{background:var(--accent);}
-.toggle input:checked+.slider:before{transform:translateX(16px);background:#fff;}
+.toggle input:checked+.slider:before{transform:translateX(18px);background:#fff;}
 
 /* Chip select */
 .chip-group{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
@@ -456,14 +456,15 @@ function computeDay(dayDE, dateStr){
   var blocked=[];
   // Stundenplan (recurring weekday)
   var now=new Date();
+  var skippedEvs=(APP.dayAdjust[dayDE]||{}).skippedEvents||{};
   APP.termine.stundenplan.forEach(function(sp){
     if(sp.weekday===dayDE){
-      // Check semester validity
+      if(skippedEvs[sp.id])return; // fällt heute aus
       var semStart=APP.termine.semester.start,semEnd=APP.termine.semester.end;
       if(semStart&&semEnd&&(dateStr<semStart||dateStr>semEnd))return;
       var travelTo=sp.travelTo?parseInt(sp.travelTo):0;
       var travelBack=sp.travelBack?parseInt(sp.travelBack):0;
-      var arrivalBuffer=travelTo>0?10:0; // 10min buffer after arriving
+      var arrivalBuffer=travelTo>0?10:0;
       var s=ptMin(sp.start)-travelTo-arrivalBuffer;
       var e=ptMin(sp.end)+travelBack;
       blocked.push({s:Math.max(s,0),e:e,label:esc(sp.name)});
@@ -472,6 +473,7 @@ function computeDay(dayDE, dateStr){
   // Other termine
   APP.termine.other.forEach(function(t){
     if(t.date===dateStr){
+      if(skippedEvs[t.id])return; // fällt heute aus
       var trav=t.travel?parseInt(t.travel):0;
       var arrBuf=trav>0?10:0;
       var s=ptMin(t.start)-trav-arrBuf;
@@ -480,7 +482,7 @@ function computeDay(dayDE, dateStr){
     }
   });
   // HFU
-  if(APP.hfu.day===dayDE&&APP.hfu.start){
+  if(APP.hfu.day===dayDE&&APP.hfu.start&&!skippedEvs["hfu"]){
     blocked.push({s:ptMin(APP.hfu.start),e:ptMin(APP.hfu.end),label:"HFU"});
   }
   // Mittagspause
@@ -646,12 +648,9 @@ function computeDay(dayDE, dateStr){
   var resultBlocks = [];
 
   if(ei.active && ei.dauer > 0 && finalBlocks.length > 0){
-    var einspielBlock = {
-      type: "einspielen",
-      items: ei.items.length
-        ? ei.items.map(function(it){return{name:it.name,dauer:it.dauer};})
-        : [{name:"Einspielen",dauer:ei.dauer}]
-    };
+    var einspielItems = ei.items.length
+      ? ei.items.map(function(it){return{name:it.name,dauer:it.dauer};})
+      : [{name:"Einspielen",dauer:ei.dauer}];
 
     // Find first orch event today
     var semStart=APP.termine.semester.start, semEnd=APP.termine.semester.end;
@@ -660,42 +659,57 @@ function computeDay(dayDE, dateStr){
         && !(semStart&&semEnd&&(dateStr<semStart||dateStr>semEnd));
     }).sort(function(a,b){return ptMin(a.start)-ptMin(b.start);});
 
-    var insertBefore = 0; // default: before first block
-
+    // Determine insertion point (before which block index)
+    var insertBefore = 0;
     if(orchSP.length > 0){
-      // Find which block comes just before the first orch event
-      var orchStart = ptMin(orchSP[0].start);
+      var orchStartMin = ptMin(orchSP[0].start);
       var travelTo = orchSP[0].travelTo ? parseInt(orchSP[0].travelTo) : 0;
-      var latestEnd = orchStart - travelTo - (travelTo>0?10:0) - 10;
-      // Find last block that ends before latestEnd
-      var bestIdx = 0;
+      var latestEnd = orchStartMin - travelTo - (travelTo>0?10:0) - 10;
       for(var bi=0; bi<finalBlocks.length; bi++){
-        if(finalBlocks[bi].end <= latestEnd) bestIdx = bi+1;
+        if(finalBlocks[bi].end <= latestEnd) insertBefore = bi+1;
       }
-      insertBefore = bestIdx;
     }
 
-    // Insert einspielen at the right position, stealing the time slot
-    // Shift all blocks after insertBefore by ei.dauer+10 minutes
-    var shifted = finalBlocks.map(function(b, i){
-      if(i < insertBefore) return b;
-      return Object.assign({},b,{start:b.start+ei.dauer+10, end:b.end+ei.dauer+10});
-    });
-
-    // Place einspielen 10min before the first shifted block after insertBefore
-    var refBlock = shifted[insertBefore];
-    einspielBlock.start = refBlock.start - ei.dauer - 10;
-    einspielBlock.end   = refBlock.start - 10;
-
-    // If einspielen starts before day start, just place it at dayStart
-    if(einspielBlock.start < startMin){
-      einspielBlock.start = startMin;
-      einspielBlock.end   = startMin + ei.dauer;
+    // Find first free slot of ei.dauer+10 for einspielen
+    // It must fit before the insertBefore block and respect blocked times
+    var eiStart = null;
+    var refStart = finalBlocks[insertBefore] ? finalBlocks[insertBefore].start : endMin;
+    
+    // Try to place einspielen in a free window before refStart
+    // Work backwards through free slots
+    var eiPlaced = false;
+    for(var fi=free.length-1; fi>=0; fi--){
+      var slot = free[fi];
+      if(slot.e > refStart) continue; // slot is after our target
+      if(slot.e - slot.s >= ei.dauer + 10){
+        // Enough room — place at end of this slot
+        eiStart = slot.e - ei.dauer;
+        eiPlaced = true;
+        break;
+      }
+    }
+    // Fallback: place right before refStart if possible
+    if(!eiPlaced){
+      eiStart = refStart - ei.dauer - 10;
+      // Check eiStart is not inside a blocked period
+      var inBlocked = blocked.some(function(b){ return eiStart < b.e && (eiStart+ei.dauer) > b.s; });
+      if(inBlocked || eiStart < startMin){
+        // Place after insertBefore block instead
+        eiStart = refStart + 10;
+      }
     }
 
-    resultBlocks = shifted.slice(0, insertBefore)
-      .concat([einspielBlock])
-      .concat(shifted.slice(insertBefore));
+    var einspielBlock = {
+      type: "einspielen",
+      start: eiStart,
+      end: eiStart + ei.dauer,
+      items: einspielItems
+    };
+
+    // Insert at correct position sorted by start time
+    var allWithEi = finalBlocks.concat([einspielBlock]);
+    allWithEi.sort(function(a,b){return a.start-b.start;});
+    resultBlocks = allWithEi;
   } else {
     resultBlocks = finalBlocks;
   }
@@ -874,20 +888,7 @@ function renderPlan(){
            +'</div>';
         });
       }
-      // Show blocked times
-      if(planDay.blocked && planDay.blocked.length){
-        planDay.blocked.forEach(function(bl){
-          if(!bl.label) return;
-          var isM=bl.label==="Mittagspause", isH=bl.label==="HFU";
-          var col=isM?"#ffa502":isH?"#9b59b6":"#4a90e2";
-          var icon=isM?"Mittag":isH?"HFU":"Termin";
-          h+='<div style="background:'+col+'15;border-left:2px solid '+col+';border-radius:6px;padding:4px 8px;margin-bottom:5px;display:flex;gap:8px;align-items:center">'
-           +'<span style="color:'+col+';font-weight:700;font-size:11px">'+icon+': '+esc(bl.label)+'</span>'
-           +'<span style="font-size:11px;color:#888">'+minToTime(bl.s)+'-'+minToTime(bl.e)+'</span>'
-           +'</div>';
-        });
-      }
-      doneCount=dayDoneCount(planDay.date||dateStr, planDay.blocks.length);
+            doneCount=dayDoneCount(planDay.date||dateStr, planDay.blocks.length);
       var donePct=planDay.blocks.length>0?Math.round(doneCount/planDay.blocks.length*100):0;
       if(planDay.blocks.length>0){
         h+='<div class="day-done-bar"><div class="day-done-fill" style="width:'+donePct+'%"></div></div>';
@@ -949,13 +950,61 @@ function setDayTime(day,field,val){
 
 function openDayAdjust(day){
   var adj=APP.dayAdjust[day]||{};
+  var skipped=adj.skippedEvents||{};
   var showMittag=APP.settings.mittagspause;
-  var h='<div class="field"><div class="field-label">Später anfangen (nur heute)</div><input type="time" class="inp" id="da_start" value="'+(adj.start||APP.settings.startTime)+'"/></div>'
-    +'<div class="field"><div class="field-label">Früher aufhören (nur heute)</div><input type="time" class="inp" id="da_end" value="'+(adj.end||APP.settings.endTime)+'"/></div>'
-    +(showMittag?'<div class="field"><div class="field-label">Mittagspause von (nur heute)</div><input type="time" class="inp" id="da_mStart" value="'+(adj.mittagStart||APP.settings.mittagStart||"12:30")+'"/></div>'
-    +'<div class="field"><div class="field-label">Mittagspause bis (nur heute)</div><input type="time" class="inp" id="da_mEnd" value="'+(adj.mittagEnd||APP.settings.mittagEnd||"13:30")+'"/></div>':"")
-    +'<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button><button class="btn btn-primary" onclick="saveDayAdjust(\''+day+'\')">Übernehmen</button></div>';
-  openAddSheet(DAYS_FULL[DAYS_DE.indexOf(day)]+" anpassen",h);
+
+  // Collect all events that apply to this day
+  var dayEvents=[];
+  var weekDates=getWeekDates();
+  var dateStr=weekDates[DAYS_DE.indexOf(day)];
+  var semStart=APP.termine.semester.start, semEnd=APP.termine.semester.end;
+
+  APP.termine.stundenplan.forEach(function(sp){
+    if(sp.weekday===day){
+      if(semStart&&semEnd&&(dateStr<semStart||dateStr>semEnd))return;
+      dayEvents.push({id:sp.id, label:(sp.spType==="orchester"?"🎼 ":"🏫 ")+sp.name+" ("+sp.start+"–"+sp.end+")"});
+    }
+  });
+  APP.termine.other.forEach(function(t){
+    if(t.date===dateStr){
+      dayEvents.push({id:t.id, label:"📅 "+t.name+" ("+t.start+"–"+t.end+")"});
+    }
+  });
+  if(APP.hfu.day===day&&APP.hfu.start){
+    dayEvents.push({id:"hfu", label:"🎓 Hauptfachunterricht ("+APP.hfu.start+"–"+APP.hfu.end+")"});
+  }
+
+  var h='';
+
+  // Termine abwählen
+  if(dayEvents.length){
+    h+='<div class="field"><div class="field-label">Heute ausfallende Termine</div>';
+    h+='<div style="font-size:11px;color:#888;margin-bottom:8px">Haken setzen = fällt heute aus, wird nicht im Plan berücksichtigt</div>';
+    dayEvents.forEach(function(ev){
+      var checked=skipped[ev.id]?" checked":"";
+      h+='<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px">'
+        +'<input type="checkbox" data-evid="'+ev.id+'"'+checked+' style="width:18px;height:18px;accent-color:var(--accent)">'
+        +ev.label+'</label>';
+    });
+    h+='</div>';
+  }
+
+  h+='<div class="field"><div class="field-label">Später anfangen (nur heute)</div>'
+    +'<input type="time" class="inp" id="da_start" value="'+(adj.start||APP.settings.startTime)+'"/></div>'
+    +'<div class="field"><div class="field-label">Früher aufhören (nur heute)</div>'
+    +'<input type="time" class="inp" id="da_end" value="'+(adj.end||APP.settings.endTime)+'"/></div>';
+
+  if(showMittag){
+    h+='<div class="field"><div class="field-label">Mittagspause von (nur heute)</div>'
+      +'<input type="time" class="inp" id="da_mStart" value="'+(adj.mittagStart||APP.settings.mittagStart||"12:30")+'"/></div>'
+      +'<div class="field"><div class="field-label">Mittagspause bis (nur heute)</div>'
+      +'<input type="time" class="inp" id="da_mEnd" value="'+(adj.mittagEnd||APP.settings.mittagEnd||"13:30")+'"/></div>';
+  }
+
+  h+='<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>'
+    +'<button class="btn btn-primary" onclick="saveDayAdjust(\"'+day+'\")">Übernehmen</button></div>';
+
+  openAddSheet(DAYS_FULL[DAYS_DE.indexOf(day)]+" anpassen", h);
 }
 
 function saveDayAdjust(day){
@@ -967,7 +1016,13 @@ function saveDayAdjust(day){
     closeAdd();
     confirm_("Sicher?","Du startest später als geplant ("+start+" statt "+defaultStart+"). Bist du sicher dass du dir die Zeit nehmen kannst?",function(){
       if(!APP.dayAdjust[day])APP.dayAdjust[day]={};
-      APP.dayAdjust[day].start=start;APP.dayAdjust[day].end=end;
+      // Save skipped events
+  var skipped={};
+  document.querySelectorAll('[data-evid]').forEach(function(cb){
+    if(cb.checked) skipped[cb.dataset.evid]=true;
+  });
+  APP.dayAdjust[day].skippedEvents=skipped;
+  APP.dayAdjust[day].start=start;APP.dayAdjust[day].end=end;
       if(APP.settings.mittagspause){
         var mS2=document.getElementById("da_mStart");var mE2=document.getElementById("da_mEnd");
         if(mS2)APP.dayAdjust[day].mittagStart=mS2.value;
@@ -1796,7 +1851,7 @@ render();
 
 <script>
 // ── Auto-update via Service Worker ──────────────────────
-var CURRENT_VERSION = '1.0'; // bump this with each update
+var CURRENT_VERSION = '2.4'; // bump this with each update
 var newSWWaiting = null;
 
 if ("serviceWorker" in navigator) {
