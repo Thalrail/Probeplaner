@@ -438,334 +438,268 @@ function setTab(t){curTab=t;document.querySelectorAll(".tab").forEach(function(x
 // PLAN GENERATION ENGINE
 // ══════════════════════════════════════════════════════
 function computeDay(dayDE, dateStr){
-  var S=APP.settings, adj=APP.dayAdjust[dayDE]||{};
-  var isSat=dayDE==="Sa", isSun=dayDE==="So";
-  var override=S.dayOverrides[dayDE]||{};
+  var S = APP.settings;
+  var adj = APP.dayAdjust[dayDE] || {};
+  var isSat = dayDE === "Sa", isSun = dayDE === "So";
 
-  var startMin=ptMin(adj.start||override.start||S.startTime);
-  var endMin=ptMin(adj.end||override.end||S.endTime);
+  // Sa/So only if time manually set
+  if((isSat||isSun) && (!adj.start||!adj.end)) return null;
 
-  // Friday heimreise
-  if(dayDE==="Fr" && adj.heimreise && adj.heimreiseTime){
-    endMin=Math.min(endMin,ptMin(adj.heimreiseTime));
-  }
-  // Sa/So only if time entered
-  if((isSat||isSun)&&(!adj.start||!adj.end)) return null;
+  var startMin = ptMin(adj.start || S.startTime);
+  var endMin   = ptMin(adj.end   || S.endTime);
+  if(dayDE==="Fr" && adj.heimreise && adj.heimreiseTime)
+    endMin = Math.min(endMin, ptMin(adj.heimreiseTime));
 
-  // Collect fixed events (termine) for this day
-  var blocked=[];
-  // Stundenplan (recurring weekday)
-  var now=new Date();
-  var skippedEvs=(APP.dayAdjust[dayDE]||{}).skippedEvents||{};
+  // ── STEP 1: Block all termine ─────────────────────────────────────────
+  var skipped = adj.skippedEvents || {};
+  var blocked = [];
+
+  var semStart = APP.termine.semester.start, semEnd = APP.termine.semester.end;
+
   APP.termine.stundenplan.forEach(function(sp){
-    if(sp.weekday===dayDE){
-      if(skippedEvs[sp.id])return; // fällt heute aus
-      var semStart=APP.termine.semester.start,semEnd=APP.termine.semester.end;
-      if(semStart&&semEnd&&(dateStr<semStart||dateStr>semEnd))return;
-      var travelTo=sp.travelTo?parseInt(sp.travelTo):0;
-      var travelBack=sp.travelBack?parseInt(sp.travelBack):0;
-      var arrivalBuffer=travelTo>0?10:0;
-      var s=ptMin(sp.start)-travelTo-arrivalBuffer;
-      var e=ptMin(sp.end)+travelBack;
-      blocked.push({s:Math.max(s,0),e:e,label:esc(sp.name)});
-    }
+    if(sp.weekday !== dayDE) return;
+    if(skipped[sp.id]) return;
+    if(semStart && semEnd && (dateStr<semStart || dateStr>semEnd)) return;
+    var travelTo   = parseInt(sp.travelTo)||0;
+    var travelBack = parseInt(sp.travelBack)||0;
+    var arrBuf     = travelTo > 0 ? 10 : 0;
+    blocked.push({s: Math.max(0, ptMin(sp.start)-travelTo-arrBuf), e: ptMin(sp.end)+travelBack, label: esc(sp.name), spType: sp.spType});
   });
-  // Other termine
+
   APP.termine.other.forEach(function(t){
-    if(t.date===dateStr){
-      if(skippedEvs[t.id])return; // fällt heute aus
-      var trav=t.travel?parseInt(t.travel):0;
-      var arrBuf=trav>0?10:0;
-      var s=ptMin(t.start)-trav-arrBuf;
-      var e=ptMin(t.end)+trav;
-      blocked.push({s:Math.max(s,0),e:e,label:esc(t.name)});
-    }
+    if(t.date !== dateStr) return;
+    if(skipped[t.id]) return;
+    var trav = parseInt(t.travel)||0;
+    var arrBuf = trav > 0 ? 10 : 0;
+    blocked.push({s: Math.max(0, ptMin(t.start)-trav-arrBuf), e: ptMin(t.end)+trav, label: esc(t.name)});
   });
-  // HFU
-  if(APP.hfu.day===dayDE&&APP.hfu.start&&!skippedEvs["hfu"]){
-    blocked.push({s:ptMin(APP.hfu.start),e:ptMin(APP.hfu.end),label:"HFU"});
-  }
-  // Mittagspause
+
+  if(APP.hfu.day===dayDE && APP.hfu.start && !skipped["hfu"])
+    blocked.push({s: ptMin(APP.hfu.start), e: ptMin(APP.hfu.end), label:"HFU"});
+
   if(S.mittagspause && S.mittagStart && S.mittagEnd){
-    var mAdj = APP.dayAdjust[dayDE]||{};
-    var mittagS = ptMin(mAdj.mittagStart||S.mittagStart);
-    var mittagE = ptMin(mAdj.mittagEnd||S.mittagEnd);
-    blocked.push({s:mittagS, e:mittagE, label:"Mittagspause"});
+    var mS = ptMin(adj.mittagStart || S.mittagStart);
+    var mE = ptMin(adj.mittagEnd   || S.mittagEnd);
+    blocked.push({s: mS, e: mE, label:"Mittagspause"});
   }
-  blocked.sort(function(a,b){return a.s-b.s;});
 
-  // Free slots — add 10min gap after each blocked period before next block can start
-  var POST_BUFFER = 10;
-  var free=[],cur=startMin;
+  blocked.sort(function(a,b){ return a.s - b.s; });
+
+  // ── STEP 2: Compute free slots (10 min buffer after each blocked period) ─
+  var POST_BUF = 10;
+  var free = [], cur = startMin;
   blocked.forEach(function(b){
-    if(cur<b.s) free.push({s:cur, e:Math.min(b.s, endMin)});
-    cur = Math.max(cur, b.e + POST_BUFFER);
+    if(cur < b.s) free.push({s: cur, e: Math.min(b.s, endMin)});
+    cur = Math.max(cur, b.e + POST_BUF);
   });
-  if(cur<endMin) free.push({s:cur, e:endMin});
+  if(cur < endMin) free.push({s: cur, e: endMin});
 
-  // Fit blocks
-  var blocks=[],count=0;
-  var maxByTime=Math.floor((endMin-startMin)/(S.blockMin+S.pauseMin))+1;
-  var maxByPref=S.maxProbeMin>0?Math.floor(S.maxProbeMin/S.blockMin):999;
-  var MAX=Math.min(maxByTime,maxByPref);
-  for(var fi=0;fi<free.length;fi++){
-    var slot=free[fi],pos=slot.s,first=true;
-    while(count<MAX){
-      if(!first)pos+=S.pauseMin;
-      if(pos+S.blockMin>slot.e)break;
-      blocks.push({start:pos,end:pos+S.blockMin,idx:count});
-      pos+=S.blockMin;count++;first=false;
+  // Helper: fit one block of <dur> minutes into free slots starting from <after>
+  function fitBlock(dur, after){
+    for(var i=0;i<free.length;i++){
+      var slot = free[i];
+      var slotStart = Math.max(slot.s, after||0);
+      if(slotStart + dur <= slot.e) return slotStart;
     }
-  }
-  if(!blocks.length)return{blocks:[],blocked:blocked,note:"keine_zeit"};
-
-  // Total available minutes
-  var totalMin=blocks.length*S.blockMin;
-  var soloRatio=S.soloRatio/100;
-
-  // Determine which content types to include
-  // Sat/Sun: only solo + technik (unless Mon has unlearned orch)
-  var includeSolo=true, includeTechnik=true, includeOrch=false, includePriv=false;
-  if(!isSat&&!isSun){
-    includeOrch=S.orchOn;
-    includePriv=true;
-  } else {
-    // Check if Monday has orch that hasn't been practiced at all this week
-    var monDate=getWeekDates()[0];
-    var monDateObj=new Date(monDate+"T12:00:00");
-    var todayDate=new Date(dateStr+"T12:00:00");
-    if(monDateObj>todayDate){
-      // Monday is after this day (shouldn't happen) — skip
-    } else {
-      var orchUrgent=APP.orch.filter(function(o){return o.active&&o.until&&o.until===addDays(dateStr,dayDE==="Sa"?1:0);});
-      if(orchUrgent.length)includeOrch=true;
-    }
+    return null;
   }
 
-  // Build content slots
-  var soloItems=APP.solo.filter(function(s){return s.status==="active";});
-  var techItems=APP.technik.slice();
-  var orchItems=S.orchOn?APP.orch.filter(function(o){
-    return o.active&&o.from&&o.from<=dateStr&&(!o.until||o.until>=dateStr);
-  }):[];
-
-  // Private practice needs
-  var privItems=[];
-  if(includePriv){
-    APP.privat.auftritte.forEach(function(a){if(a.needsPractice&&a.practiceFrom&&a.practiceFrom<=dateStr&&a.date>=dateStr)privItems.push({name:a.practiceWhat||a.name,dauer:a.practiceDailyMin||20,urgent:daysBetween(dateStr,a.date)<=1});});
-    APP.privat.projekte.forEach(function(p){if(p.needsPractice&&p.practiceFrom&&p.practiceFrom<=dateStr&&p.deadline>=dateStr)privItems.push({name:p.practiceWhat||p.name,dauer:p.practiceDailyMin||20,urgent:daysBetween(dateStr,p.deadline)<=1});});
-  }
-
-  // Deadline urgency for orch
-  orchItems.forEach(function(o){o._daysLeft=o.until?daysBetween(dateStr,o.until):999;o._urgent=o._daysLeft<=1;});
-  // Sort orch by urgency
-  orchItems.sort(function(a,b){return a._daysLeft-b._daysLeft;});
-
-  // Filter technik by frequency
-  var weekDayIdx=DAYS_DE.indexOf(dayDE);
-  techItems=techItems.filter(function(t){
-    var freq=t.freqPerWeek||7;
-    if(freq>=7)return true;
-    // simple distribution: spread evenly across week
-    return weekDayIdx%(Math.round(7/freq))===0;
-  });
-  // Sort technik by prio
-  techItems.sort(function(a,b){return(a.prio||3)-(b.prio||3);});
-
-  // Assign blocks to types
-  var assignedBlocks=[];
-  var bIdx=0;
-
-  // 1. Urgent private/orch first
-  var urgentPriv=privItems.filter(function(p){return p.urgent;});
-  var urgentOrch=orchItems.filter(function(o){return o._urgent;});
-  var urgentItems=urgentOrch.concat(urgentPriv);
-
-  urgentItems.forEach(function(item){
-    if(bIdx>=blocks.length)return;
-    var b=blocks[bIdx++];
-    assignedBlocks.push({start:b.start,end:b.end,type:"orch",urgent:true,items:[{name:item.name||(item._urgent?"":""),dauer:item.dauer||S.blockMin}]});
-  });
-
-  // 2. Distribute remaining blocks: soloRatio solo, rest technik
-  var remaining=blocks.slice(bIdx);
-  if(!remaining.length){return{blocks:assignedBlocks,blocked:blocked};}
-
-  var soloCount=Math.round(remaining.length*soloRatio);
-  var techCount=remaining.length-soloCount;
-
-  // Etüde: subtract from solo time if applicable
-  var etuedeActive=S.etuedeOn&&soloItems.length>0;
-
-  // Solo blocks
-  for(var si=0;si<soloCount&&bIdx<blocks.length;si++,bIdx++){
-    var b=blocks[bIdx];
-    var items2=[];
-    if(etuedeActive&&si===0){items2.push({name:"Wochen-Etüde",dauer:S.etuedeMin,type:"etuede"});}
-    if(soloItems.length){
-      // Weight-distribute solo items
-      var totalWeight=soloItems.reduce(function(s,x){return s+(x.weight||1);},0);
-      soloItems.forEach(function(s){
-        var mins=Math.round(((s.weight||1)/totalWeight)*(S.blockMin-(etuedeActive&&si===0?S.etuedeMin:0)));
-        if(mins>0)items2.push({name:s.name+(s.composer?" ("+s.composer+")":""),dauer:mins,instr:s.instrument,bereiche:s.bereiche||[]});
-      });
-    }
-    assignedBlocks.push({start:b.start,end:b.end,type:"solo",items:items2});
-  }
-
-  // Technik blocks
-  var techMins=techCount*S.blockMin;
-  var techForDay=techItems.slice();
-  // Drop low prio items if not enough time
-  var totalTechMin=techForDay.reduce(function(s,t){return s+(t.dauer||10);},0);
-  while(totalTechMin>techMins&&techForDay.length>0){
-    // remove lowest prio (highest number)
-    var maxPrio=Math.max.apply(null,techForDay.map(function(t){return t.prio||3;}));
-    var idx2=techForDay.map(function(t){return t.prio||3;}).lastIndexOf(maxPrio);
-    if(idx2>=0){totalTechMin-=techForDay[idx2].dauer||10;techForDay.splice(idx2,1);}
-    else break;
-  }
-
-  for(var ti=0;ti<techCount&&bIdx<blocks.length;ti++,bIdx++){
-    var b=blocks[bIdx];
-    assignedBlocks.push({start:b.start,end:b.end,type:"technik",items:techForDay.map(function(t){return{name:t.name,dauer:t.dauer||10,prio:t.prio||3};})});
-  }
-
-  // Regular orch/priv (non-urgent) — append to end if blocks remain
-  var nonUrgentOrch=includeOrch?orchItems.filter(function(o){return!o._urgent;}):[];
-  var nonUrgentPriv=includePriv?privItems.filter(function(p){return!p.urgent;}):[];
-  nonUrgentOrch.concat(nonUrgentPriv).forEach(function(item){
-    if(bIdx>=blocks.length)return;
-    var b=blocks[bIdx++];
-    assignedBlocks.push({start:b.start,end:b.end,type:item.type||"orch",items:[{name:item.name||(item.name||""),dauer:item.dauer||S.blockMin}]});
-  });
-
-  // ── SHUFFLE blocks (max 2 consecutive same type) ──
-  var finalBlocks = shuffleBlocks(assignedBlocks);
-
-  // ── EINSPIELEN ──
-  var ei = APP.einspielen;
-  var resultBlocks = [];
-
-  if(ei.active && ei.dauer > 0 && finalBlocks.length > 0){
-    var einspielItems = ei.items.length
-      ? ei.items.map(function(it){return{name:it.name,dauer:it.dauer};})
-      : [{name:"Einspielen",dauer:ei.dauer}];
-
-    // Find first orch event today
-    var semStart=APP.termine.semester.start, semEnd=APP.termine.semester.end;
-    var orchSP = APP.termine.stundenplan.filter(function(sp){
-      return sp.weekday===dayDE && sp.spType==="orchester"
-        && !(semStart&&semEnd&&(dateStr<semStart||dateStr>semEnd));
-    }).sort(function(a,b){return ptMin(a.start)-ptMin(b.start);});
-
-    // Determine insertion point (before which block index)
-    var insertBefore = 0;
-    if(orchSP.length > 0){
-      var orchStartMin = ptMin(orchSP[0].start);
-      var travelTo = orchSP[0].travelTo ? parseInt(orchSP[0].travelTo) : 0;
-      var latestEnd = orchStartMin - travelTo - (travelTo>0?10:0) - 10;
-      for(var bi=0; bi<finalBlocks.length; bi++){
-        if(finalBlocks[bi].end <= latestEnd) insertBefore = bi+1;
+  // Helper: reserve time from free slots
+  function reserve(from, dur){
+    var to = from + dur;
+    var newFree = [];
+    free.forEach(function(sl){
+      if(sl.e <= from || sl.s >= to){
+        newFree.push(sl);
+      } else {
+        if(sl.s < from) newFree.push({s:sl.s, e:from});
+        if(sl.e > to)   newFree.push({s:to,   e:sl.e});
       }
-    }
+    });
+    free = newFree;
+  }
 
-    // Find first free slot of ei.dauer+10 for einspielen
-    // It must fit before the insertBefore block and respect blocked times
+  var maxByPref = S.maxProbeMin > 0 ? Math.floor(S.maxProbeMin/S.blockMin) : 999;
+  var blocks = [];
+
+  // ── STEP 3: Einspielen — earliest possible free slot ─────────────────
+  var ei = APP.einspielen;
+  if(ei.active && ei.dauer > 0){
+    // Check if there's an orch event today — einspielen must come BEFORE it
+    var orchBlocked = blocked.filter(function(b){ return b.spType==="orchester"; })
+                             .sort(function(a,b){ return a.s-b.s; });
+    var eiDeadline = orchBlocked.length > 0 ? orchBlocked[0].s - POST_BUF : endMin;
+
+    // Find earliest slot that fits einspielen AND ends before eiDeadline
     var eiStart = null;
-    var refStart = finalBlocks[insertBefore] ? finalBlocks[insertBefore].start : endMin;
-    
-    // Try to place einspielen in a free window before refStart
-    // Work backwards through free slots
-    var eiPlaced = false;
-    for(var fi=free.length-1; fi>=0; fi--){
-      var slot = free[fi];
-      if(slot.e > refStart) continue; // slot is after our target
-      if(slot.e - slot.s >= ei.dauer + 10){
-        // Enough room — place at end of this slot
-        eiStart = slot.e - ei.dauer;
-        eiPlaced = true;
+    for(var fi=0; fi<free.length; fi++){
+      var sl = free[fi];
+      if(sl.s >= eiDeadline) break;
+      var avail = Math.min(sl.e, eiDeadline);
+      if(avail - sl.s >= ei.dauer){
+        eiStart = sl.s;
         break;
       }
     }
-    // Fallback: place right before refStart if possible
-    if(!eiPlaced){
-      eiStart = refStart - ei.dauer - 10;
-      // Check eiStart is not inside a blocked period
-      var inBlocked = blocked.some(function(b){ return eiStart < b.e && (eiStart+ei.dauer) > b.s; });
-      if(inBlocked || eiStart < startMin){
-        // Place after insertBefore block instead
-        eiStart = refStart + 10;
-      }
+    if(eiStart !== null){
+      blocks.push({
+        start: eiStart, end: eiStart+ei.dauer, type:"einspielen",
+        items: ei.items.length
+          ? ei.items.map(function(it){ return {name:it.name, dauer:it.dauer}; })
+          : [{name:"Einspielen", dauer:ei.dauer}]
+      });
+      reserve(eiStart, ei.dauer + POST_BUF);
     }
-
-    var einspielBlock = {
-      type: "einspielen",
-      start: eiStart,
-      end: eiStart + ei.dauer,
-      items: einspielItems
-    };
-
-    // Insert at correct position sorted by start time
-    var allWithEi = finalBlocks.concat([einspielBlock]);
-    allWithEi.sort(function(a,b){return a.start-b.start;});
-    resultBlocks = allWithEi;
-  } else {
-    resultBlocks = finalBlocks;
   }
 
-  return{blocks:resultBlocks,blocked:blocked};
+  // ── STEP 4: Orchester / Nebenfach / Privat obligations ───────────────
+  var isWeekend = isSat || isSun;
+
+  // Check if Monday needs orch (for weekend special case)
+  var mondayOrchUrgent = false;
+  if(isWeekend){
+    var monDate = getWeekDates()[0];
+    APP.orch.filter(function(o){ return o.active && o.until === monDate; })
+      .forEach(function(){ mondayOrchUrgent = true; });
+  }
+
+  var orchItems = [];
+  if(!isWeekend || mondayOrchUrgent){
+    if(S.orchOn){
+      APP.orch.filter(function(o){
+        return o.active && o.from && o.from<=dateStr && (!o.until||o.until>=dateStr);
+      }).forEach(function(o){
+        var daysLeft = o.until ? daysBetween(dateStr, o.until) : 999;
+        orchItems.push({name:o.name, dauer:o.dauer||S.blockMin, daysLeft:daysLeft, urgent:daysLeft<=1});
+      });
+      orchItems.sort(function(a,b){ return a.daysLeft-b.daysLeft; });
+    }
+  }
+
+  var privItems = [];
+  if(!isWeekend){
+    APP.privat.auftritte.forEach(function(a){
+      if(a.needsPractice && a.practiceFrom && a.practiceFrom<=dateStr && a.date>=dateStr)
+        privItems.push({name:a.practiceWhat||a.name, dauer:a.practiceDailyMin||20, daysLeft:daysBetween(dateStr,a.date), urgent:daysBetween(dateStr,a.date)<=1});
+    });
+    APP.privat.projekte.forEach(function(p){
+      if(p.needsPractice && p.practiceFrom && p.practiceFrom<=dateStr && p.deadline>=dateStr)
+        privItems.push({name:p.practiceWhat||p.name, dauer:p.practiceDailyMin||20, daysLeft:daysBetween(dateStr,p.deadline), urgent:daysBetween(dateStr,p.deadline)<=1});
+    });
+    privItems.sort(function(a,b){ return a.daysLeft-b.daysLeft; });
+  }
+
+  // Place urgent orch/priv first, then regular
+  var obligations = orchItems.concat(privItems);
+  obligations.forEach(function(item){
+    if(blocks.length >= maxByPref) return;
+    var s = fitBlock(S.blockMin, 0);
+    if(s === null) return;
+    blocks.push({start:s, end:s+S.blockMin, type:item.urgent?"orch":"orch",
+      urgent:item.urgent, items:[{name:item.name, dauer:item.dauer}]});
+    reserve(s, S.blockMin + POST_BUF);
+  });
+
+  // ── STEP 5: Solo & Technik nach Gewichtung ────────────────────────────
+  // Count remaining capacity
+  var remaining = maxByPref - blocks.length;
+  if(remaining <= 0){ 
+    return {blocks: blocks.sort(function(a,b){return a.start-b.start;}), blocked:blocked};
+  }
+
+  // Count how many free block slots are actually available
+  var availableSlots = 0;
+  var tempFree = free.slice();
+  var tempCur = 0;
+  // Simple count of how many blockMin slots fit
+  free.forEach(function(sl){
+    var pos = sl.s;
+    while(pos + S.blockMin <= sl.e && availableSlots < remaining){
+      availableSlots++;
+      pos += S.blockMin + POST_BUF;
+    }
+  });
+  var totalPractice = Math.min(remaining, availableSlots);
+
+  var soloCount   = Math.round(totalPractice * (S.soloRatio/100));
+  var techCount   = totalPractice - soloCount;
+
+  // Build technik list filtered by frequency & priority
+  var weekDayIdx = DAYS_DE.indexOf(dayDE);
+  var techItems = APP.technik.filter(function(t){
+    var freq = t.freqPerWeek||7;
+    return freq>=7 || weekDayIdx % Math.round(7/freq) === 0;
+  }).sort(function(a,b){ return (a.prio||3)-(b.prio||3); });
+
+  // Drop low-prio items if not enough time
+  var techMins = techCount * S.blockMin;
+  var techTotal = techItems.reduce(function(s,t){ return s+(t.dauer||10); },0);
+  while(techTotal > techMins && techItems.length > 0){
+    var maxP = Math.max.apply(null, techItems.map(function(t){return t.prio||3;}));
+    var idx2 = techItems.map(function(t){return t.prio||3;}).lastIndexOf(maxP);
+    if(idx2 >= 0){ techTotal -= techItems[idx2].dauer||10; techItems.splice(idx2,1); }
+    else break;
+  }
+
+  var soloItems = APP.solo.filter(function(s){ return s.status==="active"; });
+  var totalWeight = soloItems.reduce(function(s,x){ return s+(x.weight||1); }, 0)||1;
+
+  // Build all practice blocks (unscheduled)
+  var practiceBlocks = [];
+
+  for(var si=0; si<soloCount; si++){
+    var items2 = [];
+    if(S.etuedeOn && si===0) items2.push({name:"Wochen-Etüde", dauer:S.etuedeMin||30, type:"etuede"});
+    soloItems.forEach(function(s){
+      var mins = Math.round(((s.weight||1)/totalWeight) * (S.blockMin - (S.etuedeOn&&si===0 ? S.etuedeMin||30 : 0)));
+      if(mins>0) items2.push({name:s.name+(s.composer?" ("+s.composer+")":""), dauer:mins, instr:s.instrument, bereiche:(s.bereiche||[]).slice(0,3)});
+    });
+    practiceBlocks.push({type:"solo", items:items2});
+  }
+
+  for(var ti=0; ti<techCount; ti++){
+    practiceBlocks.push({type:"technik", items:techItems.map(function(t){return{name:t.name,dauer:t.dauer||10,prio:t.prio||3};})});
+  }
+
+  // ── STEP 6: Shuffle (max 2 same type in a row) ────────────────────────
+  // Fisher-Yates
+  for(var i=practiceBlocks.length-1;i>0;i--){
+    var j=Math.floor(Math.random()*(i+1));
+    var tmp=practiceBlocks[i]; practiceBlocks[i]=practiceBlocks[j]; practiceBlocks[j]=tmp;
+  }
+  // Fix runs of 3+
+  for(var t2=0;t2<50;t2++){
+    var ok=true;
+    for(var i=2;i<practiceBlocks.length;i++){
+      if(practiceBlocks[i].type===practiceBlocks[i-1].type && practiceBlocks[i].type===practiceBlocks[i-2].type){
+        for(var j=i+1;j<practiceBlocks.length;j++){
+          if(practiceBlocks[j].type!==practiceBlocks[i].type){
+            var tmp=practiceBlocks[i]; practiceBlocks[i]=practiceBlocks[j]; practiceBlocks[j]=tmp;
+            ok=false; break;
+          }
+        }
+      }
+    }
+    if(ok) break;
+  }
+
+  // ── STEP 7: Place practice blocks into free slots ─────────────────────
+  practiceBlocks.forEach(function(pb){
+    var s = fitBlock(S.blockMin, 0);
+    if(s === null) return;
+    pb.start = s; pb.end = s + S.blockMin;
+    blocks.push(pb);
+    reserve(s, S.blockMin + POST_BUF);
+  });
+
+  // Sort all blocks by start time
+  blocks.sort(function(a,b){ return a.start - b.start; });
+
+  return {blocks: blocks, blocked: blocked};
 }
 
 // Shuffle blocks so same type never appears more than 2x in a row
-function shuffleBlocks(blocks){
-  if(blocks.length <= 1) return blocks;
 
-  // Separate urgent blocks (keep at front), shuffle the rest
-  var urgent = blocks.filter(function(b){return b.urgent;});
-  var normal = blocks.filter(function(b){return !b.urgent;});
-
-  // Fisher-Yates shuffle
-  for(var i=normal.length-1;i>0;i--){
-    var j=Math.floor(Math.random()*(i+1));
-    var tmp=normal[i]; normal[i]=normal[j]; normal[j]=tmp;
-  }
-
-  // Fix runs of 3+ same type by swapping
-  var maxTries = 50;
-  for(var t=0;t<maxTries;t++){
-    var fixed=true;
-    for(var i=2;i<normal.length;i++){
-      if(normal[i].type===normal[i-1].type&&normal[i].type===normal[i-2].type){
-        // Find a different block to swap with
-        for(var j=i+1;j<normal.length;j++){
-          if(normal[j].type!==normal[i].type){
-            var tmp=normal[i]; normal[i]=normal[j]; normal[j]=tmp;
-            fixed=false; break;
-          }
-        }
-        // If no swap found going forward, try backward
-        if(fixed){
-          for(var j=0;j<i-2;j++){
-            if(normal[j].type!==normal[i].type){
-              var tmp=normal[i]; normal[i]=normal[j]; normal[j]=tmp;
-              fixed=false; break;
-            }
-          }
-        }
-      }
-    }
-    if(fixed) break;
-  }
-
-  // Reassign time slots in order
-  var allBlocks = urgent.concat(normal);
-  // Sort original blocks by start time to get the time slots
-  var timeSlots = blocks.slice().sort(function(a,b){return a.start-b.start;});
-  return allBlocks.map(function(b,i){
-    return Object.assign({},b,{start:timeSlots[i].start,end:timeSlots[i].end,idx:i});
-  });
-}
 
 function generatePlan(fromDayDE){
   var weekDates=getWeekDates();
@@ -1852,7 +1786,7 @@ render();
 
 <script>
 // ── Auto-update via Service Worker ──────────────────────
-var CURRENT_VERSION = '2.4'; // bump this with each update
+var CURRENT_VERSION = '2.5'; // bump this with each update
 var newSWWaiting = null;
 
 if ("serviceWorker" in navigator) {
