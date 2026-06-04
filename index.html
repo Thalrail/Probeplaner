@@ -1002,9 +1002,10 @@ function openDayAdjust(day){
   }
 
   h+='<div class="btn-row"><button class="btn btn-ghost" onclick="closeAdd()">Abbrechen</button>'
-    +'<button class="btn btn-primary" onclick="saveDayAdjust(\"'+day+'\")">Übernehmen</button></div>';
+    +'<button class="btn btn-primary" id="da_save_btn">Übernehmen</button></div>';
 
   openAddSheet(DAYS_FULL[DAYS_DE.indexOf(day)]+" anpassen", h);
+  document.getElementById("da_save_btn").onclick = function(){ saveDayAdjust(day); };
 }
 
 function saveDayAdjust(day){
