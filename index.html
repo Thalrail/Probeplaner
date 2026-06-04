@@ -487,6 +487,11 @@ function computeDay(dayDE, dateStr){
 
   // ── STEP 2: Compute free slots (10 min buffer after each blocked period) ─
   var POST_BUF = 10;
+  var totalAvailMin = endMin - startMin;
+  // Subtract blocked time from total
+  blocked.forEach(function(b){ totalAvailMin -= Math.max(0, Math.min(b.e,endMin) - Math.max(b.s,startMin)); });
+  // If less than 3h available: no pause between blocks
+  var effectivePause = totalAvailMin < 180 ? 0 : S.pauseMin;
   var free = [], cur = startMin;
   blocked.forEach(function(b){
     if(cur < b.s) free.push({s: cur, e: Math.min(b.s, endMin)});
@@ -503,6 +508,8 @@ function computeDay(dayDE, dateStr){
     }
     return null;
   }
+  // How much to reserve after placing a block (block + pause)
+  function blockReserve(){ return S.blockMin + effectivePause; }
 
   // Helper: reserve time from free slots
   function reserve(from, dur){
@@ -548,7 +555,7 @@ function computeDay(dayDE, dateStr){
           ? ei.items.map(function(it){ return {name:it.name, dauer:it.dauer}; })
           : [{name:"Einspielen", dauer:ei.dauer}]
       });
-      reserve(eiStart, ei.dauer + POST_BUF);
+      reserve(eiStart, ei.dauer + effectivePause);
     }
   }
 
@@ -597,56 +604,48 @@ function computeDay(dayDE, dateStr){
     if(s === null) return;
     blocks.push({start:s, end:s+S.blockMin, type:item.urgent?"orch":"orch",
       urgent:item.urgent, items:[{name:item.name, dauer:item.dauer}]});
-    reserve(s, S.blockMin + POST_BUF);
+    reserve(s, blockReserve());
   });
 
-  // ── STEP 5: Solo & Technik nach Gewichtung ────────────────────────────
-  // Count remaining capacity
-  var remaining = maxByPref - blocks.length;
-  if(remaining <= 0){ 
-    return {blocks: blocks.sort(function(a,b){return a.start-b.start;}), blocked:blocked};
-  }
+  // ── STEP 5: Solo & Technik nach Verhältnis ─────────────────────────────
+  // Verhältnis bestimmt Blockanzahl. Innerhalb der Solo-Blöcke: vollständig.
+  // Restzeit nach allen Blöcken: mit ungenutzter Technik auffüllen.
+  var soloItems = APP.solo.filter(function(s){ return s.status==="active"; });
+  var totalWeight = soloItems.reduce(function(s,x){ return s+(x.weight||1); }, 0)||1;
 
-  // Count how many free block slots are actually available
-  var availableSlots = 0;
-  var tempFree = free.slice();
-  var tempCur = 0;
-  // Simple count of how many blockMin slots fit
+  // Verfügbare volle Block-Slots zählen
+  var availSlots = 0;
   free.forEach(function(sl){
     var pos = sl.s;
-    while(pos + S.blockMin <= sl.e && availableSlots < remaining){
-      availableSlots++;
-      pos += S.blockMin + POST_BUF;
+    while(pos + S.blockMin <= sl.e && availSlots < (maxByPref - blocks.length)){
+      availSlots++; pos += blockReserve();
     }
   });
-  var totalPractice = Math.min(remaining, availableSlots);
+  var capacity = Math.min(maxByPref - blocks.length, availSlots);
 
-  var soloCount   = Math.round(totalPractice * (S.soloRatio/100));
-  var techCount   = totalPractice - soloCount;
+  // Verhältnis anwenden
+  var soloCount = soloItems.length > 0 ? Math.round(capacity * (S.soloRatio/100)) : 0;
+  var techCount = capacity - soloCount;
 
-  // Build technik list filtered by frequency & priority
+  // Technik-Liste nach Frequenz und Priorität
   var weekDayIdx = DAYS_DE.indexOf(dayDE);
   var techItems = APP.technik.filter(function(t){
     var freq = t.freqPerWeek||7;
     return freq>=7 || weekDayIdx % Math.round(7/freq) === 0;
   }).sort(function(a,b){ return (a.prio||3)-(b.prio||3); });
 
-  // Drop low-prio items if not enough time
+  // Low-Prio Technik entfernen wenn zu viel für verfügbare Blöcke
   var techMins = techCount * S.blockMin;
-  var techTotal = techItems.reduce(function(s,t){ return s+(t.dauer||10); },0);
+  var techTotal = techItems.reduce(function(s,t){ return s+(t.dauer||10); }, 0);
   while(techTotal > techMins && techItems.length > 0){
-    var maxP = Math.max.apply(null, techItems.map(function(t){return t.prio||3;}));
-    var idx2 = techItems.map(function(t){return t.prio||3;}).lastIndexOf(maxP);
-    if(idx2 >= 0){ techTotal -= techItems[idx2].dauer||10; techItems.splice(idx2,1); }
+    var maxP = Math.max.apply(null, techItems.map(function(t){ return t.prio||3; }));
+    var dropIdx = techItems.map(function(t){ return t.prio||3; }).lastIndexOf(maxP);
+    if(dropIdx >= 0){ techTotal -= techItems[dropIdx].dauer||10; techItems.splice(dropIdx,1); }
     else break;
   }
 
-  var soloItems = APP.solo.filter(function(s){ return s.status==="active"; });
-  var totalWeight = soloItems.reduce(function(s,x){ return s+(x.weight||1); }, 0)||1;
-
-  // Build all practice blocks (unscheduled)
+  // Solo-Blöcke bauen (vollständig, nach Gewichtung)
   var practiceBlocks = [];
-
   for(var si=0; si<soloCount; si++){
     var items2 = [];
     if(S.etuedeOn && si===0) items2.push({name:"Wochen-Etüde", dauer:S.etuedeMin||30, type:"etuede"});
@@ -657,22 +656,23 @@ function computeDay(dayDE, dateStr){
     practiceBlocks.push({type:"solo", items:items2});
   }
 
+  // Technik-Blöcke bauen
   for(var ti=0; ti<techCount; ti++){
-    practiceBlocks.push({type:"technik", items:techItems.map(function(t){return{name:t.name,dauer:t.dauer||10,prio:t.prio||3};})});
+    practiceBlocks.push({type:"technik",
+      items: techItems.map(function(t){ return {name:t.name, dauer:t.dauer||10, prio:t.prio||3}; })
+    });
   }
 
-  // ── STEP 6: Shuffle (max 2 same type in a row) ────────────────────────
-  // Fisher-Yates
-  for(var i=practiceBlocks.length-1;i>0;i--){
+  // ── STEP 6: Shuffle (max 2 gleiche hintereinander) ───────────────────
+  for(var i=practiceBlocks.length-1; i>0; i--){
     var j=Math.floor(Math.random()*(i+1));
     var tmp=practiceBlocks[i]; practiceBlocks[i]=practiceBlocks[j]; practiceBlocks[j]=tmp;
   }
-  // Fix runs of 3+
-  for(var t2=0;t2<50;t2++){
+  for(var pass=0; pass<50; pass++){
     var ok=true;
-    for(var i=2;i<practiceBlocks.length;i++){
+    for(var i=2; i<practiceBlocks.length; i++){
       if(practiceBlocks[i].type===practiceBlocks[i-1].type && practiceBlocks[i].type===practiceBlocks[i-2].type){
-        for(var j=i+1;j<practiceBlocks.length;j++){
+        for(var j=i+1; j<practiceBlocks.length; j++){
           if(practiceBlocks[j].type!==practiceBlocks[i].type){
             var tmp=practiceBlocks[i]; practiceBlocks[i]=practiceBlocks[j]; practiceBlocks[j]=tmp;
             ok=false; break;
@@ -683,16 +683,48 @@ function computeDay(dayDE, dateStr){
     if(ok) break;
   }
 
-  // ── STEP 7: Place practice blocks into free slots ─────────────────────
+  // ── STEP 7: Blöcke in freie Slots einsetzen ──────────────────────────
   practiceBlocks.forEach(function(pb){
     var s = fitBlock(S.blockMin, 0);
     if(s === null) return;
     pb.start = s; pb.end = s + S.blockMin;
     blocks.push(pb);
-    reserve(s, S.blockMin + POST_BUF);
+    reserve(s, blockReserve());
   });
 
-  // Sort all blocks by start time
+  // ── STEP 7b: Restzeit mit ungenutzter Technik auffüllen ──────────────
+  // Welche Technik wurde heute schon verwendet?
+  var usedTechnik = {};
+  blocks.forEach(function(b){
+    if(b.type==="technik" && b.items) b.items.forEach(function(it){ usedTechnik[it.name]=true; });
+  });
+
+  // Alle Technik-Übungen (nicht nur gefilterte) als Kandidaten
+  var allTech = APP.technik.filter(function(t){ return !usedTechnik[t.name]; })
+                           .sort(function(a,b){ return (a.prio||3)-(b.prio||3); });
+
+  free.forEach(function(sl){
+    var slotMins = sl.e - sl.s;
+    if(slotMins < 5) return;
+    for(var ti=0; ti<allTech.length; ti++){
+      var t = allTech[ti];
+      if(usedTechnik[t.name]) continue;
+      var needed = t.dauer||10;
+      if(slotMins < needed - 5) continue; // zu kurz selbst mit 5 Min Kürzung
+      var actualDauer = Math.min(needed, slotMins);
+      var trimmed = needed - actualDauer;
+      blocks.push({
+        start: sl.s, end: sl.s + actualDauer,
+        type: "technik", partial: trimmed > 0,
+        items: [{name:t.name, dauer:actualDauer, origDauer:needed, trimmed:trimmed, prio:t.prio||3}]
+      });
+      reserve(sl.s, actualDauer);
+      usedTechnik[t.name] = true;
+      break;
+    }
+  });
+
+    // Sort all blocks by start time
   blocks.sort(function(a,b){ return a.start - b.start; });
 
   return {blocks: blocks, blocked: blocked};
@@ -843,7 +875,15 @@ function renderPlan(){
         h+='</div></div>';
         if(block.items&&block.items.length){
           block.items.forEach(function(item){
-            h+='<div class="block-item">'+esc(item.name)+(item.dauer?' <span style="color:#555;font-size:10px">'+item.dauer+"'</span>":"")+'</div>';
+            var durStr="";
+            if(item.dauer){
+              if(item.trimmed&&item.trimmed>0){
+                durStr=' <span style="color:#ffa502;font-size:10px">'+item.dauer+"' (statt "+item.origDauer+"' – gekürzt)</span>";
+              } else {
+                durStr=' <span style="color:#555;font-size:10px">'+item.dauer+"'</span>";
+              }
+            }
+            h+='<div class="block-item">'+esc(item.name)+durStr+'</div>';
             if(item.bereiche&&item.bereiche.length){item.bereiche.slice(0,2).forEach(function(b){h+='<div class="block-item" style="padding-left:12px;color:#666;font-size:11px">▸ '+esc(b)+'</div>';});}
           });
         }
@@ -1786,7 +1826,7 @@ render();
 
 <script>
 // ── Auto-update via Service Worker ──────────────────────
-var CURRENT_VERSION = '2.5'; // bump this with each update
+var CURRENT_VERSION = '2.8'; // bump this with each update
 var newSWWaiting = null;
 
 if ("serviceWorker" in navigator) {
