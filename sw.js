@@ -1,4 +1,4 @@
-const CACHE = "probeplaner-v2.9";
+const CACHE = "probeplaner-v3.0";
 const BASE = "/Probeplaner/";
 const ASSETS = [BASE, BASE+"index.html", BASE+"manifest.json", BASE+"icon-192.png", BASE+"icon-512.png"];
 

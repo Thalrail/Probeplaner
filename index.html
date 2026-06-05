@@ -746,51 +746,32 @@ function generatePlan(fromDayDE){
     var result=computeDay(day,dateStr);
     if(!APP.plan[day]) APP.plan[day]={};
 
-    // Abgehakte Blöcke sperren — nie überschreiben
     var doneDayKey = APP.plan[day].date || dateStr;
     var donedBlocks = APP.done[doneDayKey] || {};
-    var lockedBlocks = [];
+
+    // Collect locked (done) blocks from existing plan
+    var lockedBlocks = {}; // idx -> block
     if(APP.plan[day].blocks){
       APP.plan[day].blocks.forEach(function(b, bi){
-        if(donedBlocks[bi]) lockedBlocks.push({block:b, idx:bi});
+        if(donedBlocks[bi]) lockedBlocks[bi] = b;
       });
     }
 
-    // Neue Blöcke generieren
-    var newBlocks = result ? result.blocks : [];
+    var hasLocked = Object.keys(lockedBlocks).length > 0;
 
-    // Gesperrte Blöcke wieder einfügen an ihrer ursprünglichen Position
-    // (ersetzen den neuen Block an derselben Zeitposition oder werden vorne eingefügt)
-    if(lockedBlocks.length > 0){
-      lockedBlocks.forEach(function(lb){
-        // Finde neuen Block an ähnlicher Zeit und ersetze ihn, sonst vorne einfügen
-        var replaced = false;
-        for(var ni=0; ni<newBlocks.length; ni++){
-          if(!donedBlocks[ni] && Math.abs(newBlocks[ni].start - lb.block.start) < 60){
-            newBlocks[ni] = lb.block; // gesperrter Block überschreibt neuen
-            replaced = true;
-            break;
-          }
-        }
-        if(!replaced){
-          // Gesperrten Block vorne einfügen
-          newBlocks.unshift(lb.block);
-        }
-      });
-      // done-Keys aktualisieren auf neue Indizes
-      var newDone = {};
-      newBlocks.forEach(function(b, ni){
-        lockedBlocks.forEach(function(lb){
-          if(b === lb.block) newDone[ni] = true;
-        });
-      });
-      APP.done[doneDayKey] = Object.assign({}, donedBlocks, newDone);
+    if(hasLocked){
+      // Keep existing plan intact — only update blocked times and note
+      // Never touch blocks that have done entries
+      APP.plan[day].blocked = result ? result.blocked : [];
+      APP.plan[day].note = result ? result.note : "";
+      // date stays as is
+    } else {
+      // No locked blocks — fully replace with fresh plan
+      APP.plan[day].blocks = result ? result.blocks : [];
+      APP.plan[day].blocked = result ? result.blocked : [];
+      APP.plan[day].note = result ? result.note : "";
+      APP.plan[day].date = dateStr;
     }
-
-    APP.plan[day].blocks = newBlocks;
-    APP.plan[day].blocked = result ? result.blocked : [];
-    APP.plan[day].note = result ? result.note : "";
-    APP.plan[day].date = dateStr;
   });
   saveApp();
 }
