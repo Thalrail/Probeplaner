@@ -274,7 +274,7 @@ select.inp option{background:#16162a;}
 <div class="ubanner" id="ubanner"><span>🆕 Update verfügbar!</span><button onclick="applyUpdate()" style="background:#fff;color:var(--a);border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:800;cursor:pointer">Aktualisieren</button><button onclick="document.getElementById('ubanner').classList.remove('show')" style="background:none;border:none;color:#ffffffaa;cursor:pointer;font-size:18px;padding:0 4px">×</button></div>
 
 <script>
-var CURRENT_VERSION = '3.0';
+var CURRENT_VERSION = '3.2';
 // ════════════════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════════════════
@@ -431,27 +431,33 @@ function computeDay(dayDE, dateStr){
   }
 
   // STEP 3: Solo & Technik nach Verhältnis
+  // Jede Technikübung kommt maximal EINMAL pro Tag vor.
+  // Ein Technik-Block = eine einzelne Übung.
+  // Restzeit wird mit weiteren noch nicht verwendeten Übungen gefüllt (max 5 Min Kürzung).
   var soloItems=S.solo.filter(function(s){return s.status==="active";});
   var tw=soloItems.reduce(function(s,x){return s+(x.weight||1);},0)||1;
   var wdi=DDE.indexOf(dayDE);
-  var techItems=S.technik.filter(function(t){
+
+  // Technik nach Frequenz und Priorität filtern
+  var techPool=S.technik.filter(function(t){
     var f=t.freqPerWeek||7;
     return f>=7||wdi%Math.round(7/f)===0;
   }).sort(function(a,b){return(a.prio||3)-(b.prio||3);});
 
+  // Verfügbare Slots zählen
   var av=0;
   free.forEach(function(sl){var pos=sl.s;while(pos+cfg.blockMin<=sl.e&&av<(maxPref-blocks.length)){av++;pos+=brsv();}});
   var cap=Math.min(maxPref-blocks.length,av);
+
+  // Solo/Technik Aufteilung nach Verhältnis
   var sc=soloItems.length>0?Math.round(cap*(cfg.soloRatio/100)):0;
   var tc=cap-sc;
 
-  var tMins=tc*cfg.blockMin,tTot=techItems.reduce(function(s,t){return s+(t.dauer||10);},0);
-  while(tTot>tMins&&techItems.length>0){
-    var mxP=Math.max.apply(null,techItems.map(function(t){return t.prio||3;}));
-    var di=techItems.map(function(t){return t.prio||3;}).lastIndexOf(mxP);
-    if(di>=0){tTot-=techItems[di].dauer||10;techItems.splice(di,1);}else break;
-  }
+  // Technik-Blöcke: jede Übung bekommt einen eigenen Block
+  // Wenn mehr Übungen als Technik-Blöcke: nur höchstprio Übungen
+  var techForBlocks=techPool.slice(0,tc);
 
+  // Solo-Blöcke bauen
   var pb=[];
   for(var si=0;si<sc;si++){
     var its=[];
@@ -462,38 +468,90 @@ function computeDay(dayDE, dateStr){
     });
     pb.push({type:"solo",items:its});
   }
-  for(var ti=0;ti<tc;ti++){
-    pb.push({type:"technik",items:techItems.map(function(t){return{name:t.name,dauer:t.dauer||10,prio:t.prio||3};})});
-  }
 
-  // Shuffle
+  // Technik-Blöcke bauen: eine Übung pro Block
+  var usedTech={};
+  techForBlocks.forEach(function(t){
+    if(usedTech[t.name]) return;
+    usedTech[t.name]=true;
+    // Der Block ist cfg.blockMin lang, die Übung dauert t.dauer
+    // Rest im Block ist freie Zeit / weitere niedrig-prio Übungen
+    var blockItems=[{name:t.name,dauer:t.dauer||10,prio:t.prio||3}];
+    // Fill rest of block with other exercises (remaining time after main exercise)
+    var usedMin=t.dauer||10;
+    if(usedMin<cfg.blockMin){
+      // Add lower-prio exercises to fill the block
+      techPool.forEach(function(t2){
+        if(usedTech[t2.name]) return;
+        if(usedMin+( t2.dauer||10)>cfg.blockMin) return;
+        blockItems.push({name:t2.name,dauer:t2.dauer||10,prio:t2.prio||3});
+        usedMin+=(t2.dauer||10);
+        usedTech[t2.name]=true;
+      });
+    }
+    pb.push({type:"technik",items:blockItems});
+  });
+
+  // Shuffle (max 2 gleiche hintereinander)
   for(var i=pb.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=pb[i];pb[i]=pb[j];pb[j]=tmp;}
   for(var p2=0;p2<50;p2++){var ok=true;for(var i=2;i<pb.length;i++){if(pb[i].type===pb[i-1].type&&pb[i].type===pb[i-2].type){for(var j=i+1;j<pb.length;j++){if(pb[j].type!==pb[i].type){var tmp=pb[i];pb[i]=pb[j];pb[j]=tmp;ok=false;break;}}}}if(ok)break;}
 
+  // Blöcke in freie Slots
+  // Technik-Blöcke dürfen gekürzt werden wenn kein voller Slot passt (min 15 Min)
   pb.forEach(function(b){
-    var s=fit(cfg.blockMin);if(s===null)return;
-    b.start=s;b.end=s+cfg.blockMin;blocks.push(b);rsv(s,brsv());
+    var s=fit(cfg.blockMin);
+    if(s!==null){
+      // Voller Block
+      b.start=s;b.end=s+cfg.blockMin;blocks.push(b);rsv(s,brsv());
+    } else if(b.type==="technik"){
+      // Kein voller Slot — versuche gekürzten Block (min 15 Min)
+      var sCut=fitMin(15);
+      if(sCut!==null){
+        var slotLen=freeSlotLen(sCut);
+        var cutLen=slotLen; // so viel wie möglich
+        // Kürze Items auf verfügbare Zeit
+        var cutItems=[],usedCut=0;
+        for(var ci=0;ci<b.items.length;ci++){
+          var it=b.items[ci];
+          if(usedCut+(it.dauer||10)<=cutLen){
+            cutItems.push(it);usedCut+=(it.dauer||10);
+          } else if(cutLen-usedCut>=5){
+            // Letzte Übung kürzen
+            var trimmed=it.dauer-(cutLen-usedCut);
+            cutItems.push({name:it.name,dauer:cutLen-usedCut,origDauer:it.dauer,trimmed:trimmed,prio:it.prio||3});
+            usedCut=cutLen;break;
+          } else break;
+        }
+        if(cutItems.length>0){
+          b.start=sCut;b.end=sCut+usedCut;b.partial=true;b.items=cutItems;
+          blocks.push(b);
+          rsv(sCut,usedCut+10); // 10 Min Pause nach gekürztem Block
+        }
+      }
+    }
   });
 
-  // STEP 4: Restzeit mit Technik (min 10 Min Slot, max 5 Min Kürzung)
-  var used={};
-  blocks.forEach(function(b){if(b.type==="technik"&&b.items)b.items.forEach(function(it){used[it.name]=true;});});
-  var allT=S.technik.filter(function(t){return!used[t.name];}).sort(function(a,b){return(a.prio||3)-(b.prio||3);});
+  // STEP 4: Restzeit mit noch nicht verwendeten Technik-Übungen auffüllen
+  // (min 15 Min Slot, max 5 Min Kürzung, jede Übung max. 1x pro Tag)
+  var allTechRest=S.technik.filter(function(t){return!usedTech[t.name];}).sort(function(a,b){return(a.prio||3)-(b.prio||3);});
   free.forEach(function(sl){
     var sm=sl.e-sl.s;
-    if(sm<10) return; // Minimum 10 Min für Restblock
-    for(var ti=0;ti<allT.length;ti++){
-      var t=allT[ti];if(used[t.name]) continue;
+    if(sm<15) return;
+    for(var ti=0;ti<allTechRest.length;ti++){
+      var t=allTechRest[ti];
+      if(usedTech[t.name]) continue;
       var need=t.dauer||10;
       if(sm<need-5) continue;
       var act=Math.min(need,sm),trim=need-act;
       blocks.push({start:sl.s,end:sl.s+act,type:"technik",partial:trim>0,
         items:[{name:t.name,dauer:act,origDauer:need,trimmed:trim,prio:t.prio||3}]});
-      rsv(sl.s,act);used[t.name]=true;break;
+      rsv(sl.s,act);
+      usedTech[t.name]=true;
+      break;
     }
   });
 
-  blocks.sort(function(a,b){return a.start-b.start;});
+    blocks.sort(function(a,b){return a.start-b.start;});
   return{blocks:blocks,blocked:blocked};
 }
 
