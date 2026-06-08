@@ -124,6 +124,11 @@ select.inp option{background:#16162a;}
 .btime{font-size:11px;color:var(--t2);}
 .bitem{font-size:12px;color:#ccc;margin-top:3px;line-height:1.5;}
 .btrimmed{color:var(--y);font-size:10px;}
+.block-items{overflow:hidden;transition:max-height 0.25s ease;}
+.block-items.collapsed{max-height:0;}
+.block-items.expanded{max-height:500px;}
+.block-summary{font-size:11px;color:var(--t2);margin-top:3px;cursor:pointer;}
+.block-expand-hint{font-size:10px;color:#555;margin-top:2px;}
 .check-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;border:2px solid #2a2a40;cursor:pointer;background:none;flex-shrink:0;font-size:14px;transition:all .15s;}
 .check-btn.done{background:var(--g);border-color:var(--g);color:#fff;}
 .done-bar{height:4px;background:#1e1e30;border-radius:2px;margin:8px 0 4px;overflow:hidden;}
@@ -274,7 +279,7 @@ select.inp option{background:#16162a;}
 <div class="ubanner" id="ubanner"><span>🆕 Update verfügbar!</span><button onclick="applyUpdate()" style="background:#fff;color:var(--a);border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:800;cursor:pointer">Aktualisieren</button><button onclick="document.getElementById('ubanner').classList.remove('show')" style="background:none;border:none;color:#ffffffaa;cursor:pointer;font-size:18px;padding:0 4px">×</button></div>
 
 <script>
-var CURRENT_VERSION = '3.2';
+var CURRENT_VERSION = '3.1';
 // ════════════════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════════════════
@@ -627,7 +632,7 @@ function autoGenerateFrom(day){
 // ════════════════════════════════════════════════════════
 // UI STATE
 // ════════════════════════════════════════════════════════
-var curTab="plan",curDetailDay=null,newSWWaiting=null;
+var curTab="plan",curDetailDay=null,newSWWaiting=null,expandedBlocks={};
 
 function render(){
   document.querySelectorAll(".tab").forEach(function(b){b.classList.toggle("active",b.dataset.tab===curTab);});
@@ -714,6 +719,7 @@ function renderPlan(){
 // PLAN DETAIL VIEW
 // ════════════════════════════════════════════════════════
 function openDetail(day){
+  expandedBlocks={};
   curDetailDay=day;
   var dates=getWeekDates(),di=DDE.indexOf(day);
   var ds=dates[di];
@@ -786,15 +792,42 @@ function renderDetailBody(day,dateStr,pd,done,adj){
       h+='<div style="display:flex;align-items:center;gap:8px"><span class="btime">'+minToHM(b.start)+'–'+minToHM(b.end)+'</span>';
       h+='<button class="check-btn'+(isDone?" done":"")+'" id="cb_'+dateStr+'_'+bi+'" onclick="toggleDone(\''+dateStr+'\','+bi+')">'+(isDone?"✓":"")+'</button></div></div>';
       if(b.items&&b.items.length){
-        b.items.forEach(function(it){
-          var durStr="";
-          if(it.dauer){
-            if(it.trimmed&&it.trimmed>0) durStr=' <span class="btrimmed">'+it.dauer+"' (statt "+it.origDauer+"' – gekürzt)</span>";
-            else durStr=' <span style="color:#555;font-size:10px">'+it.dauer+"'</span>";
-          }
-          h+='<div class="bitem">'+esc(it.name)+durStr+'</div>';
-          if(it.bereiche&&it.bereiche.length) it.bereiche.forEach(function(b){h+='<div class="bitem" style="padding-left:10px;color:#666;font-size:11px">▸ '+esc(b)+'</div>';});
-        });
+        var isTechnik=b.type==="technik";
+        var bKey=dateStr+"_"+bi;
+        var isExpanded=!!expandedBlocks[bKey];
+        if(isTechnik&&b.items.length>1){
+          // Show summary when collapsed
+          var summaryNames=b.items.slice(0,2).map(function(it){return esc(it.name);}).join(", ")+(b.items.length>2?"…":"");
+          h+='<div class="block-summary" id="bs_'+bKey+'" onclick="toggleBlock(this)">'+summaryNames+'</div>';
+          h+='<div class="block-items '+(isExpanded?"expanded":"collapsed")+'" id="bi_'+bKey+'">';
+          b.items.forEach(function(it){
+            var durStr="";
+            if(it.dauer){
+              if(it.trimmed&&it.trimmed>0) durStr=' <span class="btrimmed">'+it.dauer+"' (statt "+it.origDauer+"' – gekürzt)</span>";
+              else durStr=' <span style="color:#555;font-size:10px">'+it.dauer+"'</span>";
+            }
+            // Look up full technik info for book/page/nr
+            var techInfo=S.technik.find(function(t){return t.name===it.name;});
+            var meta="";
+            if(techInfo){
+              if(techInfo.book) meta+='<span class="pill pgr">'+esc(techInfo.book)+(techInfo.page?' S.'+techInfo.page:'')+(techInfo.nr?' Nr.'+techInfo.nr:'')+'</span> ';
+            }
+            h+='<div class="bitem">'+esc(it.name)+durStr+(meta?'<div style="margin-top:2px">'+meta+'</div>':'')+'</div>';
+          });
+          h+='</div>';
+          h+='<div class="block-expand-hint" id="bh_'+bKey+'" onclick="toggleBlock(this)">'+(isExpanded?"▲ zuklappen":"▼ Details")+'</div>';
+        } else {
+          // Solo, Einspielen, Orch: always show all items
+          b.items.forEach(function(it){
+            var durStr="";
+            if(it.dauer){
+              if(it.trimmed&&it.trimmed>0) durStr=' <span class="btrimmed">'+it.dauer+"' (statt "+it.origDauer+"' – gekürzt)</span>";
+              else durStr=' <span style="color:#555;font-size:10px">'+it.dauer+"'</span>";
+            }
+            h+='<div class="bitem">'+esc(it.name)+durStr+'</div>';
+            if(it.bereiche&&it.bereiche.length) it.bereiche.forEach(function(b){h+='<div class="bitem" style="padding-left:10px;color:#666;font-size:11px">▸ '+esc(b)+'</div>';});
+          });
+        }
       }
       h+='</div>';
     });
@@ -820,6 +853,21 @@ function closeDetail(){
   curDetailDay=null;
 }
 
+function toggleBlock(el){
+  // Get bKey from sibling element IDs
+  var parent=el.parentElement;
+  var itemsEl=parent.querySelector('[id^="bi_"]');
+  if(!itemsEl) return;
+  var key=itemsEl.id.replace("bi_","");
+  expandedBlocks[key]=!expandedBlocks[key];
+  var expanded=expandedBlocks[key];
+  itemsEl.classList.toggle("collapsed",!expanded);
+  itemsEl.classList.toggle("expanded",expanded);
+  var hint=parent.querySelector('[id^="bh_"]');
+  if(hint) hint.textContent=expanded?"▲ zuklappen":"▼ Details";
+  var summary=parent.querySelector('[id^="bs_"]');
+  if(summary) summary.style.display=expanded?"none":"block";
+}
 function toggleDone(dateStr,bi){
   if(!S.done[dateStr]) S.done[dateStr]={};
   S.done[dateStr][bi]=!S.done[dateStr][bi];
