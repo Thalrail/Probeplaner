@@ -795,7 +795,7 @@ function renderDetailBody(day,dateStr,pd,done,adj){
         var isTechnik=b.type==="technik";
         var bKey=dateStr+"_"+bi;
         var isExpanded=!!expandedBlocks[bKey];
-        if(isTechnik&&b.items.length>1){
+        if(isTechnik&&b.items.length>=1){
           // Show summary when collapsed
           var summaryNames=b.items.slice(0,2).map(function(it){return esc(it.name);}).join(", ")+(b.items.length>2?"…":"");
           h+='<div class="block-summary" id="bs_'+bKey+'" onclick="toggleBlock(this)">'+summaryNames+'</div>';
