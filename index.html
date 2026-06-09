@@ -391,26 +391,64 @@ function computeDay(dayDE, dateStr){
   var maxPref=cfg.maxProbeMin>0?Math.floor(cfg.maxProbeMin/cfg.blockMin):999;
   var blocks=[];
 
-  // STEP 1: Einspielen — frühestmöglicher Slot, vor Orchesterproben
+  // STEP 1: Einspielen — immer vollständig, direkt vor 1. Block oder vor Orchester
+  // Wenn vor Orchester kein Platz: Einspielen NACH letztem Termin vor Orchester
+  // Wenn am Morgen Hochschule: Einspielen nach Hochschule, nicht davor
   var ei=S.einspielen;
   if(ei.active&&ei.dauer>0){
     var orchB=blocked.filter(function(b){return b.spType==="orchester";}).sort(function(a,b){return a.s-b.s;});
-    var eiDL=orchB.length>0?orchB[0].s-POST:endMin;
-    var eiS=null;
-    for(var fi=0;fi<free.length;fi++){
-      var sl=free[fi];
-      if(sl.s>=eiDL) break;
-      var av=Math.min(sl.e,eiDL);
-      if(av-sl.s>=ei.dauer){eiS=sl.s;break;}
+    var eiItems=ei.items.length?ei.items.map(function(it){return{name:it.name,dauer:it.dauer};}):
+      [{name:"Einspielen",dauer:ei.dauer}];
+
+    var eiStart=null;
+
+    if(orchB.length>0){
+      // Einspielen direkt vor erste Orchesterprobe
+      // Suche letzten freien Slot VOR dem Orchester der das Einspielen aufnimmt
+      var orchStart=orchB[0].s;
+      for(var fi=free.length-1;fi>=0;fi--){
+        var sl=free[fi];
+        if(sl.e>orchStart) continue; // Slot endet nach Orchester-Beginn
+        var slotEnd=Math.min(sl.e, orchStart-POST);
+        if(slotEnd-sl.s>=ei.dauer){
+          eiStart=slotEnd-ei.dauer; // Direkt vor Orchester
+          break;
+        }
+      }
+      // Fallback: kein Platz vor Orchester → nach Orchester
+      if(eiStart===null){
+        for(var fi=0;fi<free.length;fi++){
+          if(free[fi].e-free[fi].s>=ei.dauer){eiStart=free[fi].s;break;}
+        }
+      }
+    } else {
+      // Kein Orchester: Einspielen direkt vor dem ersten möglichen Übeblock
+      // Suche ersten freien Slot der NACH allen Morgen-Terminen liegt
+      // (d.h. nicht den winzigen Slot vor Hochschule nutzen)
+      var bestSlot=null;
+      for(var fi=0;fi<free.length;fi++){
+        var sl=free[fi];
+        if(sl.e-sl.s>=ei.dauer+cfg.blockMin){
+          // Slot hat Platz für Einspielen UND mindestens einen Block danach
+          bestSlot=sl;break;
+        }
+      }
+      if(bestSlot) eiStart=bestSlot.s;
+      else{
+        // Fallback: erster Slot mit genug Platz für nur Einspielen
+        for(var fi=0;fi<free.length;fi++){
+          if(free[fi].e-free[fi].s>=ei.dauer){eiStart=free[fi].s;break;}
+        }
+      }
     }
-    if(eiS!==null){
-      blocks.push({start:eiS,end:eiS+ei.dauer,type:"einspielen",
-        items:ei.items.length?ei.items.map(function(it){return{name:it.name,dauer:it.dauer};}):
-        [{name:"Einspielen",dauer:ei.dauer}]});
-      rsv(eiS,ei.dauer+effPause);
+
+    if(eiStart!==null){
+      blocks.push({start:eiStart,end:eiStart+ei.dauer,type:"einspielen",items:eiItems});
+      rsv(eiStart,ei.dauer+effPause);
     }
   }
 
+  
   // STEP 2: Orchester/NF + Privat (nach Dringlichkeit)
   var isWE=isSat||isSun;
   if(!isWE&&cfg.orchOn){
@@ -503,39 +541,85 @@ function computeDay(dayDE, dateStr){
 
   // Blöcke in freie Slots
   // Technik-Blöcke dürfen gekürzt werden wenn kein voller Slot passt (min 15 Min)
+  // Blöcke in freie Slots einsetzen
+  // Technik-Blöcke die nicht vollständig passen: kürzen + Rest-Minuten merken
+  var leftoverItems=[]; // Übungen die nicht reingepasst haben
+
   pb.forEach(function(b){
     var s=fit(cfg.blockMin);
     if(s!==null){
-      // Voller Block
       b.start=s;b.end=s+cfg.blockMin;blocks.push(b);rsv(s,brsv());
     } else if(b.type==="technik"){
       // Kein voller Slot — versuche gekürzten Block (min 15 Min)
       var sCut=fitMin(15);
       if(sCut!==null){
-        var slotLen=freeSlotLen(sCut);
-        var cutLen=slotLen; // so viel wie möglich
-        // Kürze Items auf verfügbare Zeit
-        var cutItems=[],usedCut=0;
+        var slotLen=freeSlotLen(sCut),cutItems=[],usedCut=0;
         for(var ci=0;ci<b.items.length;ci++){
           var it=b.items[ci];
-          if(usedCut+(it.dauer||10)<=cutLen){
+          if(usedCut+(it.dauer||10)<=slotLen){
             cutItems.push(it);usedCut+=(it.dauer||10);
-          } else if(cutLen-usedCut>=5){
-            // Letzte Übung kürzen
-            var trimmed=it.dauer-(cutLen-usedCut);
-            cutItems.push({name:it.name,dauer:cutLen-usedCut,origDauer:it.dauer,trimmed:trimmed,prio:it.prio||3});
-            usedCut=cutLen;break;
-          } else break;
+          } else {
+            // Übung passt nicht mehr rein — für später merken
+            var fitHere=slotLen-usedCut;
+            if(fitHere>=5){
+              // Teilweise reinpacken
+              cutItems.push({name:it.name,dauer:fitHere,origDauer:it.dauer,trimmed:it.dauer-fitHere,prio:it.prio||3});
+              usedCut+=fitHere;
+              // Rest merken
+              leftoverItems.push({name:it.name,dauer:it.dauer-fitHere,prio:it.prio||3,isLeftover:true});
+            } else {
+              // Gar nicht reinpacken — komplett merken
+              leftoverItems.push({name:it.name,dauer:it.dauer||10,prio:it.prio||3,isLeftover:true});
+            }
+            // Restliche Items auch merken
+            for(var ri=ci+1;ri<b.items.length;ri++){
+              leftoverItems.push({name:b.items[ri].name,dauer:b.items[ri].dauer||10,prio:b.items[ri].prio||3,isLeftover:true});
+            }
+            break;
+          }
         }
         if(cutItems.length>0){
           b.start=sCut;b.end=sCut+usedCut;b.partial=true;b.items=cutItems;
-          blocks.push(b);
-          rsv(sCut,usedCut+10); // 10 Min Pause nach gekürztem Block
+          blocks.push(b);rsv(sCut,usedCut+10);
+        } else {
+          // Alles als Leftover
+          b.items.forEach(function(it){leftoverItems.push({name:it.name,dauer:it.dauer||10,prio:it.prio||3,isLeftover:true});});
         }
+      } else {
+        // Kein Platz — alles merken
+        b.items.forEach(function(it){leftoverItems.push({name:it.name,dauer:it.dauer||10,prio:it.prio||3,isLeftover:true});});
       }
     }
   });
 
+  // Leftover-Übungen in bestehende Technik-Blöcke einbauen wo noch Platz ist
+  if(leftoverItems.length>0){
+    blocks.forEach(function(b){
+      if(b.type!=="technik") return;
+      var blockDur=(b.end-b.start);
+      var usedMin=b.items.reduce(function(s,it){return s+(it.dauer||0);},0);
+      var spare=blockDur-usedMin;
+      if(spare<5) return;
+      // Fülle mit Leftover-Items auf
+      var remaining=[];
+      leftoverItems.forEach(function(lo){
+        if(spare<=0){remaining.push(lo);return;}
+        if(lo.dauer<=spare){
+          b.items.push({name:lo.name,dauer:lo.dauer,prio:lo.prio||3});
+          spare-=lo.dauer;
+        } else if(spare>=5){
+          b.items.push({name:lo.name,dauer:spare,origDauer:lo.dauer,trimmed:lo.dauer-spare,prio:lo.prio||3,partial:true});
+          remaining.push({name:lo.name,dauer:lo.dauer-spare,prio:lo.prio||3,isLeftover:true});
+          spare=0;
+        } else {
+          remaining.push(lo);
+        }
+      });
+      leftoverItems=remaining;
+    });
+  }
+
+  
   // STEP 4: Restzeit mit noch nicht verwendeten Technik-Übungen auffüllen
   // (min 15 Min Slot, max 5 Min Kürzung, jede Übung max. 1x pro Tag)
   var allTechRest=S.technik.filter(function(t){return!usedTech[t.name];}).sort(function(a,b){return(a.prio||3)-(b.prio||3);});
